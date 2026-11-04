@@ -7,13 +7,45 @@
       name="description"
       content="个人 GPT Image 图像工作室，支持参考图、并行生成、局部编辑与自然扩图。"
     />
-    <title>OpenLux · 个人图像工作室</title>
+    <title>Autohsu · 个人图像工作室</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <style>
+      /* First-paint shell: visible content is the fallback if scripting is unavailable. */
+      html[data-entrance='pending'] #appSurface {
+        opacity: 0;
+        visibility: hidden;
+      }
+      html[data-entrance='pending'] #appIntro {
+        display: grid !important;
+        position: fixed;
+        inset: 0;
+        place-items: center;
+        background: #fcfcfc;
+        z-index: 100;
+      }
+      .intro-signature {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .intro-signature img {
+        width: 48px;
+        height: 48px;
+      }
+      .intro-signature span {
+        font:
+          500 27px 'Segoe UI',
+          sans-serif;
+        letter-spacing: -0.035em;
+        color: #242424;
+      }
+    </style>
+    <script src="/entrance.js"></script>
   </head>
   <body>
     <div id="appIntro" class="app-intro" aria-hidden="true" hidden>
       <div class="intro-signature">
-        <img src="/favicon.svg" alt="" width="48" height="48" /><span>OpenLux</span>
+        <img src="/favicon.svg" alt="" width="48" height="48" /><span>Autohsu</span>
       </div>
     </div>
     <div id="appSurface">
@@ -21,7 +53,7 @@
         <div class="brand">
           <svg class="brandmark" aria-hidden="true"><use href="#i-mark" /></svg>
           <div class="brandtext">
-            <h1>OpenLux</h1>
+            <h1>Autohsu</h1>
             <span>个人图像工作室</span>
           </div>
         </div>

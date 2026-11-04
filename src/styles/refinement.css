@@ -4,8 +4,8 @@
   --page-gutter: clamp(16px, 3vw, 40px);
   --grid-gap: clamp(16px, 1.5vw, 24px);
   --motion-fast: 140ms;
-  --motion-normal: 220ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-normal: 280ms;
+  --ease-standard: cubic-bezier(0.65, 0, 0.35, 1);
 }
 ::selection {
   background: #dfe6eb;
@@ -96,10 +96,10 @@ summary,
 input,
 textarea {
   transition:
-    background-color var(--motion-fast),
-    color var(--motion-fast),
-    border-color var(--motion-fast),
-    box-shadow var(--motion-fast);
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
 }
 .btn:active:not(:disabled),
 .icon-btn:active:not(:disabled) {
@@ -109,7 +109,7 @@ textarea {
   background-color: #555;
 }
 .choice-tile .ratio-shape {
-  transition: transform var(--motion-normal) var(--ease-out);
+  transition: transform var(--motion-normal) var(--ease-standard);
 }
 .choice-tile[aria-pressed='true'] .ratio-shape {
   transform: scale(1.06);
@@ -122,10 +122,10 @@ dialog,
   opacity: 0;
   transform: translateY(6px) scale(0.985);
   transition:
-    opacity 160ms ease-out,
-    transform 200ms var(--ease-out),
-    display 200ms allow-discrete,
-    overlay 200ms allow-discrete;
+    opacity 200ms var(--ease-standard),
+    transform 240ms var(--ease-standard),
+    display 240ms allow-discrete,
+    overlay 240ms allow-discrete;
 }
 dialog[open],
 .parameter-popover:not([hidden]),
@@ -141,9 +141,9 @@ dialog:not([open]),
 dialog::backdrop {
   background: rgb(0 0 0 / 0%);
   transition:
-    background-color 200ms ease-out,
-    display 200ms allow-discrete,
-    overlay 200ms allow-discrete;
+    background-color 240ms var(--ease-standard),
+    display 240ms allow-discrete,
+    overlay 240ms allow-discrete;
 }
 dialog[open]::backdrop {
   background: rgb(0 0 0 / 32%);
@@ -162,9 +162,9 @@ dialog[open]::backdrop {
 .toast {
   opacity: 1;
   transition:
-    opacity 160ms,
-    translate 200ms var(--ease-out),
-    display 200ms allow-discrete;
+    opacity 160ms var(--ease-standard),
+    translate 200ms var(--ease-standard),
+    display 240ms allow-discrete;
   pointer-events: none;
 }
 .toast:empty {
@@ -179,7 +179,7 @@ dialog[open]::backdrop {
 }
 .drop-overlay {
   transition:
-    opacity 160ms,
+    opacity 160ms var(--ease-standard),
     display 160ms allow-discrete;
   opacity: 1;
 }
@@ -195,7 +195,7 @@ dialog[open]::backdrop {
 .card-menu::details-content {
   opacity: 0;
   transition:
-    opacity 160ms,
+    opacity 160ms var(--ease-standard),
     content-visibility 160ms allow-discrete;
 }
 .card-menu[open]::details-content {
@@ -219,9 +219,9 @@ dialog[open]::backdrop {
   border: 1px solid #dedede;
   border-radius: 7px;
   transition:
-    transform var(--motion-normal) var(--ease-out),
-    width var(--motion-normal) var(--ease-out),
-    height var(--motion-normal) var(--ease-out);
+    transform var(--motion-normal) var(--ease-standard),
+    width var(--motion-normal) var(--ease-standard),
+    height var(--motion-normal) var(--ease-standard);
 }
 .has-selection-indicator > button:is([aria-pressed='true'], [aria-selected='true']) {
   background: transparent;
@@ -350,8 +350,8 @@ dialog[open]::backdrop {
     opacity: 0;
     overflow: clip;
     transition:
-      block-size var(--motion-normal) var(--ease-out),
-      opacity 160ms,
+      block-size var(--motion-normal) var(--ease-standard),
+      opacity 160ms var(--ease-standard),
       content-visibility var(--motion-normal) allow-discrete;
   }
   :is(.settings-details, .preserve-details, .attempt-list)[open]::details-content {
@@ -490,7 +490,15 @@ dialog[open]::backdrop {
     height: 30px;
   }
 }
+
+.summary-chevron {
+  transition: transform 200ms var(--ease-standard);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .summary-chevron {
+    transition: none;
+  }
   :root {
     --motion-fast: 70ms;
     --motion-normal: 70ms;

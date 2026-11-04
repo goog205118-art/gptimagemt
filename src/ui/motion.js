@@ -1,4 +1,4 @@
-const ease = 'cubic-bezier(0.16, 1, 0.3, 1)';
+const ease = 'cubic-bezier(0.65, 0, 0.35, 1)';
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const animations = new WeakMap();
 
@@ -14,7 +14,7 @@ export function revealContent(element) {
             { opacity: 0.4, transform: 'translateY(4px)' },
             { opacity: 1, transform: 'none' },
           ],
-      { duration: reduced() ? 70 : 200, easing: ease },
+      { duration: reduced() ? 70 : 220, easing: ease },
     ),
   );
 }
@@ -42,7 +42,7 @@ export function transitionCards(container, previous) {
         y = old.rect.y - rect.y;
       if (Math.abs(x) + Math.abs(y) > 1 && Math.abs(y) < innerHeight) {
         card.animate([{ transform: `translate(${x}px, ${y}px)` }, { transform: 'none' }], {
-          duration: 240,
+          duration: 280,
           easing: ease,
         });
       }
@@ -105,50 +105,76 @@ export function mountMotion() {
 
 export function beginEntrance() {
   const intro = document.getElementById('appIntro'),
-    surface = document.getElementById('appSurface');
-  if (reduced() || !intro || !surface) return () => {};
+    surface = document.getElementById('appSurface'),
+    root = document.documentElement,
+    preference = matchMedia('(prefers-reduced-motion: reduce)');
+  // If the pre-paint gate already timed out, do not flash a late logo over a visible page.
+  if (preference.matches || !intro || !surface || root.dataset.entrance !== 'pending') {
+    root.removeAttribute('data-entrance');
+    return () => {};
+  }
   const started = performance.now();
-  let finishing = false;
+  let finishing = false,
+    released = false,
+    revealTimer,
+    watchdog;
+  const owned = [];
   intro.hidden = false;
   surface.inert = true;
   surface.classList.add('is-entering');
+  root.dataset.entrance = 'running';
   const release = () => {
+    if (released) return;
+    released = true;
+    clearTimeout(watchdog);
+    clearTimeout(revealTimer);
+    // Commit the final DOM state before canceling filled animations.
     intro.hidden = true;
     surface.inert = false;
     surface.classList.remove('is-entering');
-    surface.getAnimations().forEach((animation) => animation.cancel());
+    root.removeAttribute('data-entrance');
+    owned.forEach((animation) => animation.cancel());
+    preference.removeEventListener('change', onPreference);
+    removeEventListener('pagehide', release);
   };
+  const onPreference = () => {
+    if (preference.matches) release();
+  };
+  preference.addEventListener('change', onPreference);
+  addEventListener('pagehide', release, { once: true });
   // A failed/slow startup must never leave the workspace hidden or inaccessible.
-  const watchdog = setTimeout(release, 2200);
+  watchdog = setTimeout(release, 2200);
   return () => {
-    if (finishing) return;
+    if (finishing || released) return;
     finishing = true;
-    setTimeout(
+    revealTimer = setTimeout(
       () => {
-        if (intro.hidden) return;
+        if (released) return;
         surface.classList.remove('is-entering');
         surface.inert = false;
         intro.style.pointerEvents = 'none';
-        const page = surface.animate(
-          [
-            { opacity: 0.3, filter: 'blur(6px)' },
-            { opacity: 1, filter: 'blur(0)' },
-          ],
-          { duration: 460, easing: ease },
-        );
-        intro.animate(
-          [
-            { opacity: 1, filter: 'blur(0)', transform: 'scale(1)' },
-            { opacity: 0, filter: 'blur(5px)', transform: 'scale(1.025)' },
-          ],
-          { duration: 320, easing: ease },
-        );
-        page.finished
-          .catch(() => {})
-          .finally(() => {
-            clearTimeout(watchdog);
-            release();
-          });
+        try {
+          const page = surface.animate(
+            [
+              { opacity: 0, filter: 'blur(6px)' },
+              { opacity: 1, filter: 'blur(0)' },
+            ],
+            { duration: 460, easing: ease, fill: 'both' },
+          );
+          owned.push(
+            page,
+            intro.animate(
+              [
+                { opacity: 1, filter: 'blur(0)', transform: 'scale(1)' },
+                { opacity: 0, filter: 'blur(5px)', transform: 'scale(1.025)' },
+              ],
+              { duration: 360, easing: ease, fill: 'both' },
+            ),
+          );
+          page.finished.then(release, release);
+        } catch {
+          release();
+        }
       },
       Math.max(0, 320 - (performance.now() - started)),
     );

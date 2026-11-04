@@ -11,7 +11,7 @@ async function files(directory) {
     )
   ).flat();
 }
-const sources = (await Promise.all(['src', 'shared', 'api', 'server'].map(files))).flat();
+const sources = (await Promise.all(['src', 'shared', 'api', 'server', 'public'].map(files))).flat();
 for (const file of sources.filter((name) => name.endsWith('.js'))) {
   const check = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
   if (check.status) {

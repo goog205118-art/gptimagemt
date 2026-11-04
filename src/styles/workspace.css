@@ -47,15 +47,15 @@ dialog {
   overflow: visible;
   transition:
     border-color 0.18s,
-    padding 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    padding 0.22s var(--ease-standard);
 }
 .composer-content {
   display: grid;
   grid-template-rows: 1fr;
   opacity: 1;
   transition:
-    grid-template-rows 0.24s cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 0.18s;
+    grid-template-rows 0.24s var(--ease-standard),
+    opacity 0.18s var(--ease-standard);
 }
 .composer-inner {
   min-height: 0;
@@ -125,8 +125,8 @@ dialog {
   font-size: 13px;
   padding: 0 2px;
   transition:
-    height 0.24s cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 0.16s;
+    height 0.24s var(--ease-standard),
+    opacity 0.16s var(--ease-standard);
   pointer-events: none;
 }
 .composer-peek > span:first-child {
