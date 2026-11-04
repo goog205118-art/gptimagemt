@@ -57,12 +57,12 @@ function updateQuotaTrigger() {
   const data = quotaState.accountData,
     has = data?.quota != null && Number.isFinite(Number(data.quota)),
     label = has
-      ? '余额 ' + quotaAmount(data.quota)
+      ? quotaAmount(data.quota)
       : quotaState.busy && quotaState.mode === 'account'
-        ? '余额查询中…'
+        ? '查询中…'
         : quotaState.accountStatus === 'error'
-          ? '余额待刷新'
-          : '账户余额';
+          ? '待刷新'
+          : '余额';
   $('quotaButtonLabel').textContent = label;
   $('quotaBtn').setAttribute(
     'aria-label',

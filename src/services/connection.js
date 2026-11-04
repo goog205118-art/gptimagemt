@@ -9,7 +9,10 @@ import { pump } from '../features/jobs.js';
 import { applyGptProfile, isGptImageModel, setGptModelInventory } from './models.js';
 function keyIndicator() {
   $('keyDot').classList.toggle('ready', !!state.key);
-  $('keyLabel').textContent = state.key ? 'API 已连接' : '连接 API';
+  $('keyLabel').textContent = 'API';
+  const label = (state.key ? 'API 已连接' : '尚未连接 API') + ' · 连接与偏好';
+  $('keyBtn').setAttribute('aria-label', label);
+  $('keyBtn').title = label;
 }
 function showSettings() {
   $('baseInput').value = state.base;

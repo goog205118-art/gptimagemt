@@ -58,16 +58,27 @@
           </div>
         </div>
         <nav class="top-actions" aria-label="工作室工具">
-          <button class="btn quota-trigger" id="quotaBtn">
-            <span class="quota-dot" aria-hidden="true"></span
-            ><span id="quotaButtonLabel">账户余额</span></button
-          ><button class="btn" id="libraryBtn">素材与预设</button
-          ><button class="btn" id="queueBtn">队列 <span id="queueCount">0</span></button
-          ><button class="btn" id="newBtn" title="开始新的创作">
-            <svg aria-hidden="true"><use href="#i-plus" /></svg
-            ><span class="new-label">新的创作</span></button
-          ><button class="btn outlined" id="keyBtn">
-            <span class="key-dot" id="keyDot"></span><span id="keyLabel">连接 API</span>
+          <button class="btn quota-trigger" id="quotaBtn" aria-label="查看账户余额">
+            <svg aria-hidden="true"><use href="#i-wallet" /></svg>
+            <span id="quotaButtonLabel">余额</span>
+          </button>
+          <button
+            class="toolbar-icon"
+            id="libraryBtn"
+            aria-label="素材与预设"
+            data-tooltip="素材与预设"
+          >
+            <svg aria-hidden="true"><use href="#i-library" /></svg>
+          </button>
+          <button class="toolbar-icon" id="queueBtn" aria-label="生成队列" data-tooltip="生成队列">
+            <svg aria-hidden="true"><use href="#i-queue" /></svg>
+            <span class="toolbar-badge" id="queueCount" hidden>0</span>
+          </button>
+          <button class="toolbar-icon" id="newBtn" aria-label="新的创作" data-tooltip="新的创作">
+            <svg aria-hidden="true"><use href="#i-plus" /></svg>
+          </button>
+          <button class="btn outlined" id="keyBtn" aria-label="连接与偏好" title="连接与偏好">
+            <span class="key-dot" id="keyDot"></span><span id="keyLabel">API</span>
           </button>
         </nav>
       </header>
@@ -78,19 +89,34 @@
             <div class="inline">
               <select id="projectFilter" aria-label="筛选项目">
                 <option value="all">全部项目</option></select
-              ><button class="icon-btn" id="projectsBtn" aria-label="管理项目" title="管理项目">
-                <svg aria-hidden="true"><use href="#i-plus" /></svg>
+              ><button
+                class="toolbar-icon"
+                id="projectsBtn"
+                aria-label="管理项目"
+                data-tooltip="管理项目"
+              >
+                <svg aria-hidden="true"><use href="#i-folder-plus" /></svg>
               </button>
             </div>
             <div class="search-wrap">
+              <svg class="search-icon" aria-hidden="true"><use href="#i-search" /></svg>
               <input
                 type="search"
                 id="search"
-                placeholder="搜索提示词、名称、变量…"
+                placeholder="搜索作品…"
                 aria-label="搜索作品"
+                title="搜索提示词、作品名称或变量"
               />
             </div>
-            <button class="btn" id="selectionToggle" aria-pressed="false">多选</button>
+            <button
+              class="toolbar-icon"
+              id="selectionToggle"
+              aria-label="多选作品"
+              data-tooltip="多选作品"
+              aria-pressed="false"
+            >
+              <svg aria-hidden="true"><use href="#i-select" /></svg>
+            </button>
           </div>
           <div class="gallery-head" id="galleryHead" hidden>
             <div class="gallery-title">

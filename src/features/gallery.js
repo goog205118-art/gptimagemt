@@ -105,6 +105,12 @@ function render() {
       ? `${running} 张生成中 · ${waiting} 张等待${state.queuePaused ? ' · 队列已暂停' : ''}`
       : `${all.length} 张创作`;
   $('queueCount').textContent = running + waiting;
+  $('queueCount').hidden = running + waiting === 0;
+  const queueLabel =
+    running + waiting ? `生成队列 · ${running} 张生成中，${waiting} 张等待` : '生成队列';
+  $('queueBtn').setAttribute('aria-label', queueLabel);
+  $('queueBtn').dataset.tooltip =
+    running + waiting ? `生成队列 · ${running + waiting} 项` : '生成队列';
   const filtered = filteredTasks(),
     shown = filtered.slice(0, state.visibleLimit),
     groups = new Map();
@@ -160,6 +166,9 @@ function updateBulk() {
   $('bulkBar').hidden = !state.selecting;
   $('selectedCount').textContent = `已选 ${state.selection.size} 张`;
   $('selectionToggle').setAttribute('aria-pressed', String(state.selecting));
+  const selectionLabel = state.selecting ? '退出多选' : '多选作品';
+  $('selectionToggle').setAttribute('aria-label', selectionLabel);
+  $('selectionToggle').dataset.tooltip = selectionLabel;
   const selected = selectedTasks();
   $('compareBtn').disabled = selected.length !== 2 || selected.some((t) => t.status !== 'success');
   $('zipBtn').disabled = !selected.length;

@@ -24,13 +24,138 @@ main {
   margin-inline: auto;
 }
 .topbar {
-  padding-inline: 0;
+  height: 56px;
+  min-height: 56px;
+  padding: 0;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 16px;
 }
+.brand {
+  gap: 10px;
+  padding-top: 0;
+}
+.brandmark {
+  width: 24px;
+  height: 24px;
+}
+.brandtext {
+  gap: 10px;
+}
+.brandtext h1 {
+  font-size: 17px;
+}
+.brandtext span {
+  font-size: 12px;
+}
+.top-actions {
+  flex-wrap: nowrap;
+  gap: 4px;
+  max-width: none;
+}
+.top-actions .quota-trigger {
+  max-width: 160px;
+  min-height: 34px;
+  padding: 6px 10px;
+  gap: 7px;
+  font-size: 13px;
+}
+.top-actions .quota-trigger svg {
+  width: 17px;
+  height: 17px;
+  color: var(--muted);
+}
+.top-actions #keyBtn {
+  min-height: 32px;
+  padding: 6px 10px;
+  margin-left: 6px;
+  gap: 7px;
+  font-size: 12px;
+}
+.toolbar-icon,
+.top-actions #newBtn.toolbar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 8px;
+  border-radius: 10px;
+  color: var(--muted);
+}
+.toolbar-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.toolbar-icon:hover,
+.toolbar-icon[aria-pressed='true'] {
+  color: var(--ink);
+  background: #ececec;
+}
+.toolbar-icon:active {
+  background: #e3e3e3;
+}
+.toolbar-badge {
+  position: absolute;
+  right: 0;
+  top: 0;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: var(--ink);
+  color: white;
+  font-size: 10px;
+  line-height: 1;
+  pointer-events: none;
+}
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  translate: -50% 0;
+  transform: translateY(-2px);
+  opacity: 0;
+  visibility: hidden;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: var(--ink);
+  color: white;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 70;
+  transition:
+    opacity 140ms var(--ease-standard),
+    transform 140ms var(--ease-standard),
+    visibility 140ms;
+}
+[data-tooltip]:is(:hover, :focus-visible)::after {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 220ms;
+}
+#selectionToggle::after,
+#queueBtn::after,
+#newBtn::after {
+  left: auto;
+  right: 0;
+  translate: 0;
+}
+
 main {
   min-height: 0;
 }
 .workspace {
-  padding-top: 18px;
+  padding-top: 6px;
   padding-bottom: 24px;
   padding-right: 0;
   margin-right: calc(-1 * var(--workspace-scrollbar, 0px));
@@ -55,9 +180,62 @@ main {
   gap: 16px;
 }
 .workspace-tools {
-  gap: 12px;
-  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
 }
+.workspace-tools > .inline {
+  flex: 0 1 auto;
+  min-width: 0;
+  gap: 0;
+}
+.workspace-tools .picker-button {
+  min-height: 34px;
+  max-width: 180px;
+  padding: 6px 8px 6px 0;
+  font-size: 13px;
+  gap: 8px;
+}
+.workspace-tools .search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  max-width: 280px;
+  margin-left: auto;
+}
+.search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.workspace-tools .search-wrap input {
+  height: 34px;
+  padding: 7px 12px 7px 33px;
+  font-size: 12px;
+  background: #f6f6f6;
+  border-color: transparent;
+}
+.workspace-tools .search-wrap input:focus {
+  background: var(--surface);
+  border-color: var(--strong);
+}
+.workspace-tools #selectionToggle {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 8px;
+}
+.welcome {
+  min-height: 280px;
+  padding-top: 24px;
+}
+
 .composer-dock {
   padding-top: 12px;
 }
@@ -370,35 +548,42 @@ dialog[open]::backdrop {
 }
 @media (max-width: 650px) {
   .topbar {
-    padding-block: 14px;
+    padding-block: 0;
   }
   .workspace {
-    padding-top: 12px;
+    padding-top: 4px;
   }
   .workspace .gallery,
   .batch-grid {
     grid-template-columns: minmax(0, 1fr);
   }
   .workspace-tools {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
-    margin-bottom: 18px;
+    gap: 6px;
+    margin-bottom: 12px;
   }
-  .workspace-tools > .inline {
-    grid-column: 1;
+  .workspace-tools .picker-button {
+    max-width: 110px;
+    font-size: 12px;
   }
-  .workspace-tools > .search-wrap {
-    grid-row: 2;
-    grid-column: 1 / -1;
-    width: 100%;
-    max-width: none;
-    margin: 0;
+  .workspace-tools #projectsBtn {
+    width: 30px;
+    height: 34px;
+    min-height: 34px;
+    padding: 7px;
   }
-  .workspace-tools > #selectionToggle {
-    grid-column: 2;
-    grid-row: 1;
+  .workspace-tools .search-wrap {
+    max-width: 240px;
   }
+  .workspace-tools .search-wrap input {
+    padding-right: 6px;
+    padding-left: 28px;
+  }
+  .search-icon {
+    left: 8px;
+    width: 14px;
+    height: 14px;
+  }
+
   .filters {
     gap: 0;
   }
@@ -433,15 +618,18 @@ dialog[open]::backdrop {
     flex-wrap: wrap;
   }
 }
-@media (max-width: 420px) {
+@media (max-width: 480px) {
   .topbar {
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 4px;
     position: relative;
+    height: auto;
+    min-height: 86px;
+    padding-block: 8px;
   }
   .brand {
     padding-top: 0;
-    min-height: 34px;
+    min-height: 32px;
   }
   .top-actions {
     width: 100%;
@@ -451,14 +639,13 @@ dialog[open]::backdrop {
   }
   .top-actions #keyBtn {
     position: absolute;
-    top: 14px;
+    top: 8px;
     right: 0;
+    margin-left: 0;
   }
-  .top-actions .btn {
-    padding-inline: 6px;
-  }
-  .quota-trigger {
-    max-width: 105px;
+  .top-actions .quota-trigger {
+    max-width: 150px;
+    padding-left: 2px;
   }
   .gallery-title {
     flex-wrap: wrap;
@@ -468,6 +655,13 @@ dialog[open]::backdrop {
   }
   .filter {
     padding-inline: 8px;
+  }
+  .workspace-tools .picker-button {
+    max-width: 94px;
+  }
+  #projectsBtn::after {
+    left: 0;
+    translate: 0;
   }
 }
 @media (max-height: 600px) {
@@ -498,6 +692,10 @@ dialog[open]::backdrop {
 @media (prefers-reduced-motion: reduce) {
   .summary-chevron {
     transition: none;
+  }
+  [data-tooltip]::after {
+    transform: none;
+    transition: opacity 70ms;
   }
   :root {
     --motion-fast: 70ms;

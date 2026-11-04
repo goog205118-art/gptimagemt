@@ -2,13 +2,6 @@
   max-width: 170px;
   gap: 7px;
 }
-.quota-dot {
-  width: 6px;
-  height: 6px;
-  background: #777;
-  border-radius: 50%;
-  flex: none;
-}
 .quota-trigger span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;
