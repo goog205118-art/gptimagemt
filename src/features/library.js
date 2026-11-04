@@ -1,3 +1,4 @@
+import { revealContent } from '../ui/motion.js';
 import { $ } from '../core/dom.js';
 import { existing, state } from '../core/state.js';
 import { escapeHTML, uid } from '../core/utils.js';
@@ -65,7 +66,13 @@ function renderLibrary() {
         .join('') +
       '</div>';
   if (runtime.libraryTab === 'usage') content = usageHTML();
+  const changed = $('libraryContent').dataset.tab !== runtime.libraryTab;
   $('libraryContent').innerHTML = content;
+  $('libraryContent').dataset.tab = runtime.libraryTab;
+  if (changed) {
+    $('libraryContent').scrollTop = 0;
+    revealContent($('libraryContent'));
+  }
 }
 async function savePreset() {
   const d = readDraft();

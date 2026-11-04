@@ -340,4 +340,4 @@ function initializeAccountControls() {
   $('settingsForm').addEventListener('submit', () => queueMicrotask(resetQuotaCache));
   renderQuota();
 }
-export { initializeAccountControls, refreshSavedAccountBalance };
+export { initializeAccountControls, refreshSavedAccountBalance, resetQuotaCache };

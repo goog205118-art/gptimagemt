@@ -1,4 +1,5 @@
 import { $, icon } from '../core/dom.js';
+import { revealContent } from '../ui/motion.js';
 import { state, taskById, taskTitle } from '../core/state.js';
 import { extension, fetchImage, outputBlob, pruneURLs, referenceURL } from '../core/assets.js';
 import { escapeHTML, uid } from '../core/utils.js';
@@ -7,6 +8,9 @@ import { expandComposer, renderEditContext, scheduleDraft, updateSend } from './
 import { runtime } from '../core/runtime.js';
 import { guard, notify, setStatus } from '../ui/dialogs.js';
 function renderRefs() {
+  const previous = new Set(
+    Array.from($('refs').querySelectorAll('[data-ref]'), (ref) => ref.dataset.ref),
+  );
   $('refs').hidden = !state.refs.length;
   $('clearRefs').hidden = !state.refs.length;
   $('refs').innerHTML = state.refs
@@ -24,6 +28,9 @@ function renderRefs() {
           )}</select><input type="text" data-ref-note="${ref.id}" value="${escapeHTML(ref.note || '')}" placeholder="参考什么 / 保留什么" maxlength="300" aria-label="参考图 ${i + 1} 说明"><div class="ref-order"><span class="ref-name" title="${escapeHTML(ref.name)}">${escapeHTML(ref.name)}</span><div><button type="button" data-move="${ref.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="参考图 ${i + 1} 前移">‹</button><button type="button" data-move="${ref.id}" data-dir="1" ${i === state.refs.length - 1 ? 'disabled' : ''} aria-label="参考图 ${i + 1} 后移">›</button></div></div></div>`,
     )
     .join('');
+  for (const ref of $('refs').querySelectorAll('[data-ref]')) {
+    if (!previous.has(ref.dataset.ref)) revealContent(ref);
+  }
   pruneURLs();
 }
 async function validateFile(file) {

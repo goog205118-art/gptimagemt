@@ -1,3 +1,4 @@
+import { captureCards, transitionCards } from '../ui/motion.js';
 import { active, existing, projectName, state, taskById, taskTitle } from '../core/state.js';
 import { ROLE_NAMES, STATUS_NAMES } from '../core/config.js';
 import { escapeHTML } from '../core/utils.js';
@@ -79,7 +80,7 @@ function cardHTML(t) {
     '<button data-action="copy">复制提示词</button>',
     !busy ? '<button data-action="delete">删除记录</button>' : '',
   ].join('');
-  return `<article class="card ${state.selection.has(t.id) ? 'selected' : ''} ${t.discarded ? 'discarded' : ''}" data-task-id="${t.id}"><div class="card-visual">${visual}<span class="card-status ${['failed', 'unknown'].includes(t.status) ? 'failed' : ''}">${t.status === 'running' ? '<span class="spinner"></span>' : ''}${label}${busy ? ` · <span data-elapsed="${t.id}">${duration(t)}</span>` : ''}</span><div class="card-top-actions">${state.selecting ? `<input class="select-card" type="checkbox" data-select="${t.id}" aria-label="选择 ${escapeHTML(taskTitle(t))}" ${state.selection.has(t.id) ? 'checked' : ''}>` : ''}<button data-action="favorite" class="${t.favorite ? 'active' : ''}" title="${t.favorite ? '取消收藏' : '收藏'}" aria-label="${t.favorite ? '取消收藏' : '收藏'}">${icon('star')}</button></div></div><div class="card-body"><div class="card-prompt" title="${escapeHTML(t.prompt)}">${escapeHTML(t.name || t.prompt)}</div><div class="card-meta">${t.parentId ? '<span class="version-tag">修改分支</span>' : ''}${t.variant ? `<span class="variant-tag">${escapeHTML(t.variant)}</span>` : ''}${escapeHTML(taskMeta(t))}${t.maskReport?.outsidePreserved ? '<span class="mask-protected-tag"> · 选区外已保护</span>' : t.maskReport?.kind === 'outpaint' ? '<span class="mask-protected-tag"> · ' + (t.maskReport.corePreserved ? '原图优先融合' : '自然扩图') + '</span>' : ''}</div>${t.resultWarning ? '<p class="result-warning">' + escapeHTML(t.resultWarning) + '</p>' : ''}<div class="card-refs">${t.refs
+  return `<article class="card ${state.selection.has(t.id) ? 'selected' : ''} ${t.discarded ? 'discarded' : ''}" data-task-id="${t.id}" data-motion-state="${t.status}"><div class="card-visual">${visual}<span class="card-status ${['failed', 'unknown'].includes(t.status) ? 'failed' : ''}">${t.status === 'running' ? '<span class="spinner"></span>' : ''}${label}${busy ? ` · <span data-elapsed="${t.id}">${duration(t)}</span>` : ''}</span><div class="card-top-actions">${state.selecting ? `<input class="select-card" type="checkbox" data-select="${t.id}" aria-label="选择 ${escapeHTML(taskTitle(t))}" ${state.selection.has(t.id) ? 'checked' : ''}>` : ''}<button data-action="favorite" class="${t.favorite ? 'active' : ''}" title="${t.favorite ? '取消收藏' : '收藏'}" aria-label="${t.favorite ? '取消收藏' : '收藏'}">${icon('star')}</button></div></div><div class="card-body"><div class="card-prompt" title="${escapeHTML(t.prompt)}">${escapeHTML(t.name || t.prompt)}</div><div class="card-meta">${t.parentId ? '<span class="version-tag">修改分支</span>' : ''}${t.variant ? `<span class="variant-tag">${escapeHTML(t.variant)}</span>` : ''}${escapeHTML(taskMeta(t))}${t.maskReport?.outsidePreserved ? '<span class="mask-protected-tag"> · 选区外已保护</span>' : t.maskReport?.kind === 'outpaint' ? '<span class="mask-protected-tag"> · ' + (t.maskReport.corePreserved ? '原图优先融合' : '自然扩图') + '</span>' : ''}</div>${t.resultWarning ? '<p class="result-warning">' + escapeHTML(t.resultWarning) + '</p>' : ''}<div class="card-refs">${t.refs
     .slice(0, 3)
     .map(
       (r) =>
@@ -93,6 +94,7 @@ function cardHTML(t) {
   })}${success ? ' · ' + duration(t) : ''}${t.priceEstimate !== null && t.priceEstimate !== undefined ? ' · 估 ' + money(t.priceEstimate, t.currency) : ''}</span></div><div class="card-actions">${success ? `<button class="btn continue" data-action="continue">继续改图 ${icon('arrow')}</button>` : t.status === 'queued' || t.status === 'retry_wait' ? '<button class="btn" data-action="queueEdit">编辑排队</button>' : t.status === 'running' ? '<button class="btn" data-action="cancel">取消</button>' : '<button class="btn" data-action="retry">' + icon('retry') + '重新生成</button>'}<button class="btn" data-action="edit">导入编辑</button><details class="card-menu"><summary aria-label="更多作品操作">···</summary><div class="card-menu-items">${menu}</div></details></div></div></article>`;
 }
 function render() {
+  const previousCards = captureCards($('gallery'));
   const all = state.tasks.filter(existing),
     running = all.filter((t) => t.status === 'running').length,
     waiting = all.filter((t) => ['queued', 'retry_wait'].includes(t.status)).length;
@@ -127,6 +129,7 @@ function render() {
     (all.length
       ? '<p class="filter-empty">这里还没有对应的创作，试试其他项目或筛选条件。</p>'
       : '');
+  transitionCards($('gallery'), previousCards);
   $('loadMore').hidden = shown.length >= filtered.length;
   $('loadMore').textContent = `显示更多（已显示 ${shown.length} / ${filtered.length}）`;
   document.querySelectorAll('.output').forEach(

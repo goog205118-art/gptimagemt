@@ -1,3 +1,4 @@
+import { revealContent } from '../ui/motion.js';
 import { runtime } from '../core/runtime.js';
 import { guard, showDialog } from '../ui/dialogs.js';
 import { projectName, state, taskById, taskTitle } from '../core/state.js';
@@ -47,6 +48,8 @@ function renderDetail() {
     t.status === 'success'
       ? `<img src="${escapeHTML(imageURL(t))}" alt="${escapeHTML(t.prompt)}">`
       : `<div class="card-state"><div class="state-title">${STATUS_NAMES[t.status]}</div><div class="state-detail">${escapeHTML(t.error || '')}</div></div>`;
+  if ($('detailMedia').dataset.version !== t.id + ':' + t.status) revealContent($('detailMedia'));
+  $('detailMedia').dataset.version = t.id + ':' + t.status;
   $('taskNameInput').value = t.name || '';
   const parent = taskById(t.parentId);
   $('detailActions').innerHTML =

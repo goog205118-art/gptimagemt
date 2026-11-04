@@ -1,3 +1,4 @@
+import { revealContent, updateSelection } from './motion.js';
 import { $ } from '../core/dom.js';
 import { escapeHTML } from '../core/utils.js';
 const floating = {
@@ -33,7 +34,7 @@ function positionPanel(panel, anchor, preferAbove = true, alignLeft = false) {
     r = anchor.getBoundingClientRect();
   panel.style.maxHeight = Math.max(80, bottom - top) + 'px';
   panel.style.maxWidth = Math.max(160, right - left) + 'px';
-  const p = panel.getBoundingClientRect(),
+  const p = { width: panel.offsetWidth, height: panel.offsetHeight },
     above = r.top - top - gap,
     below = bottom - r.bottom - gap;
   let y;
@@ -69,6 +70,9 @@ function selectParameterTab(tab, focus = false) {
   });
   document.querySelectorAll('.parameter-pane').forEach((p) => (p.hidden = p.id !== 'pane-' + tab));
   $('advanced').querySelector('.parameter-body').scrollTop = 0;
+  revealContent($('pane-' + tab));
+  updateSelection(document.querySelector('.parameter-tabs'));
+  document.querySelectorAll('#pane-' + tab + ' .segment-choices').forEach(updateSelection);
   closeSelectPicker(false);
   if (focus) $('tab-' + tab).focus();
   positionFloatingPanels();
@@ -85,6 +89,7 @@ function toggleParameterPanel() {
   $('advancedToggle').setAttribute('aria-expanded', 'true');
   revealFloating($('advanced'));
   positionFloatingPanels();
+  document.querySelectorAll('#advanced .segment-choices, .parameter-tabs').forEach(updateSelection);
   $('tab-image').focus({
     preventScroll: true,
   });
@@ -204,8 +209,19 @@ function renderChoiceSet(group) {
           text: o.textContent,
           disabled: o.disabled,
         }));
-  const signature = JSON.stringify([source.value, source.disabled, choices]);
-  if (group.dataset.signature === signature) return;
+  const signature = JSON.stringify([source.disabled, choices]);
+  if (group.dataset.signature === signature) {
+    group
+      .querySelectorAll('[data-choice-value]')
+      .forEach((button) =>
+        button.setAttribute(
+          'aria-pressed',
+          String(button.dataset.choiceValue === String(source.value)),
+        ),
+      );
+    if (group.matches('.segment-choices')) updateSelection(group);
+    return;
+  }
   group.dataset.signature = signature;
   group.innerHTML = choices
     .map((o) => {
@@ -219,6 +235,7 @@ function renderChoiceSet(group) {
       return `<button type="button" class="${id === 'size' ? 'choice-tile' : 'choice-segment'}" data-choice-for="${id}" data-choice-value="${escapeHTML(o.value)}" aria-pressed="${selected}" aria-label="${escapeHTML(id === 'size' ? o.text : id === 'quality' ? o.text : o.text)}" ${disabled ? 'disabled' : ''}>${content}</button>`;
     })
     .join('');
+  if (group.matches('.segment-choices')) updateSelection(group);
 }
 function syncPickers() {
   if (syncingPickers) return;
@@ -331,9 +348,15 @@ function openSelectPicker(select, button, key) {
     (selected || choices[0])?.focus({
       preventScroll: true,
     });
-  selected?.scrollIntoView({
-    block: 'nearest',
-  });
+  // Scroll only the option list. scrollIntoView can scroll the owning parameter
+  // pane during its entrance and trigger the outside-scroll dismissal handler.
+  if (selected) {
+    const list = pickerRoot.querySelector('.picker-list');
+    list.scrollTop = Math.max(
+      0,
+      selected.offsetTop - list.offsetTop - list.clientHeight / 2 + selected.offsetHeight / 2,
+    );
+  }
   const search = pickerRoot.querySelector('.picker-search');
   if (search)
     search.oninput = () => {
@@ -559,8 +582,16 @@ function mountUiPickers() {
   document.addEventListener(
     'scroll',
     (e) => {
-      if (floating.select && !pickerRoot.contains(e.target)) closeSelectPicker(false);
       if (floating.parameterOpen) positionPanel($('advanced'), $('advancedToggle'), true, true);
+      if (floating.select && !pickerRoot.contains(e.target)) {
+        const scroller = e.target;
+        if (scroller instanceof Element && scroller.contains(floating.trigger)) {
+          const clip = scroller.getBoundingClientRect(),
+            anchor = floating.trigger.getBoundingClientRect();
+          if (anchor.bottom <= clip.top || anchor.top >= clip.bottom) closeSelectPicker(false);
+          else positionPanel(pickerRoot, floating.trigger, false);
+        } else closeSelectPicker(false);
+      }
     },
     true,
   );

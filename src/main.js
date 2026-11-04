@@ -4,8 +4,11 @@ import './styles/studio.css';
 import './styles/pickers.css';
 import './styles/models.css';
 import './styles/workspace.css';
+import './styles/refinement.css';
+import { beginEntrance, mountMotion } from './ui/motion.js';
 import { init } from './app.js';
 import { storageWarning } from './ui/dialogs.js';
+import { mountConnectionTransfer } from './features/connection-transfer.js';
 import { mountUiDialogs } from './ui/dialogs.js';
 import { mountFeaturesComposer } from './features/composer.js';
 import { mountFeaturesLibrary } from './features/library.js';
@@ -20,10 +23,13 @@ import { mountFeaturesComparison } from './features/comparison.js';
 import { mountFeaturesTransfers } from './features/transfers.js';
 import { mountUiPickers } from './ui/pickers.js';
 import { mountFeaturesEditor } from './features/editor.js';
+const finishEntrance = beginEntrance();
 document.body.insertAdjacentHTML('afterbegin', sprite);
+mountMotion();
 mountUiDialogs();
 mountFeaturesComposer();
 mountFeaturesLibrary();
+mountConnectionTransfer();
 mountFeaturesReferences();
 mountFeaturesGallery();
 mountFeaturesJobs();
@@ -35,7 +41,9 @@ mountFeaturesComparison();
 mountFeaturesTransfers();
 mountUiPickers();
 mountFeaturesEditor();
-init().catch((error) => {
-  console.error(error);
-  storageWarning('初始化未完成，请刷新页面或从备份恢复。');
-});
+init()
+  .catch((error) => {
+    console.error(error);
+    storageWarning('初始化未完成，请刷新页面或从备份恢复。');
+  })
+  .finally(finishEntrance);

@@ -1,0 +1,516 @@
+/* Operate surface: one entrance, quiet continuity, shared page grid. */
+:root {
+  --page-width: 1440px;
+  --page-gutter: clamp(16px, 3vw, 40px);
+  --grid-gap: clamp(16px, 1.5vw, 24px);
+  --motion-fast: 140ms;
+  --motion-normal: 220ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+::selection {
+  background: #dfe6eb;
+  color: var(--ink);
+}
+input,
+textarea {
+  caret-color: var(--ink);
+}
+#appSurface {
+  min-height: 100dvh;
+}
+.topbar,
+main {
+  width: min(var(--page-width), calc(100% - 2 * var(--page-gutter)));
+  margin-inline: auto;
+}
+.topbar {
+  padding-inline: 0;
+}
+main {
+  min-height: 0;
+}
+.workspace {
+  padding-top: 18px;
+  padding-bottom: 24px;
+  padding-right: 0;
+  margin-right: calc(-1 * var(--workspace-scrollbar, 0px));
+}
+.workspace .gallery,
+.batch-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--grid-gap);
+  align-items: start;
+}
+.workspace .gallery.is-grouped {
+  display: block;
+}
+.card,
+.batch-section,
+.gallery-title,
+.search-wrap,
+.top-actions {
+  min-width: 0;
+}
+.gallery-head {
+  gap: 16px;
+}
+.workspace-tools {
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.composer-dock {
+  padding-top: 12px;
+}
+.composer-dock .hint {
+  padding-inline: 4px;
+}
+.app-intro {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  z-index: 100;
+}
+.intro-signature {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.intro-signature img {
+  width: 48px;
+  height: 48px;
+}
+.intro-signature span {
+  font-size: 27px;
+  letter-spacing: -0.035em;
+  font-weight: 500;
+}
+#appSurface.is-entering {
+  opacity: 0;
+}
+button,
+summary,
+.card,
+.picker-button,
+input,
+textarea {
+  transition:
+    background-color var(--motion-fast),
+    color var(--motion-fast),
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast);
+}
+.btn:active:not(:disabled),
+.icon-btn:active:not(:disabled) {
+  background-color: #e7e7e7;
+}
+.btn.primary:active:not(:disabled) {
+  background-color: #555;
+}
+.choice-tile .ratio-shape {
+  transition: transform var(--motion-normal) var(--ease-out);
+}
+.choice-tile[aria-pressed='true'] .ratio-shape {
+  transform: scale(1.06);
+}
+
+/* Native top-layer transitions also cover Escape, outside click and nested dialogs. */
+dialog,
+.parameter-popover,
+.select-popover {
+  opacity: 0;
+  transform: translateY(6px) scale(0.985);
+  transition:
+    opacity 160ms ease-out,
+    transform 200ms var(--ease-out),
+    display 200ms allow-discrete,
+    overlay 200ms allow-discrete;
+}
+dialog[open],
+.parameter-popover:not([hidden]),
+.select-popover:not([hidden]) {
+  opacity: 1;
+  transform: none;
+}
+dialog:not([open]),
+.parameter-popover[hidden],
+.select-popover[hidden] {
+  pointer-events: none;
+}
+dialog::backdrop {
+  background: rgb(0 0 0 / 0%);
+  transition:
+    background-color 200ms ease-out,
+    display 200ms allow-discrete,
+    overlay 200ms allow-discrete;
+}
+dialog[open]::backdrop {
+  background: rgb(0 0 0 / 32%);
+}
+@starting-style {
+  dialog[open],
+  .parameter-popover:not([hidden]),
+  .select-popover:not([hidden]) {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  dialog[open]::backdrop {
+    background: rgb(0 0 0 / 0%);
+  }
+}
+.toast {
+  opacity: 1;
+  transition:
+    opacity 160ms,
+    translate 200ms var(--ease-out),
+    display 200ms allow-discrete;
+  pointer-events: none;
+}
+.toast:empty {
+  opacity: 0;
+  translate: 0 6px;
+}
+@starting-style {
+  .toast:not(:empty) {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+.drop-overlay {
+  transition:
+    opacity 160ms,
+    display 160ms allow-discrete;
+  opacity: 1;
+}
+.drop-overlay[hidden] {
+  opacity: 0;
+  pointer-events: none;
+}
+@starting-style {
+  .drop-overlay:not([hidden]) {
+    opacity: 0;
+  }
+}
+.card-menu::details-content {
+  opacity: 0;
+  transition:
+    opacity 160ms,
+    content-visibility 160ms allow-discrete;
+}
+.card-menu[open]::details-content {
+  opacity: 1;
+}
+
+/* Retain the same buttons on value changes, so selection can travel between them. */
+.has-selection-indicator {
+  position: relative;
+  isolation: isolate;
+}
+.has-selection-indicator > button {
+  position: relative;
+  z-index: 1;
+}
+.selection-indicator {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+  background: var(--surface);
+  border: 1px solid #dedede;
+  border-radius: 7px;
+  transition:
+    transform var(--motion-normal) var(--ease-out),
+    width var(--motion-normal) var(--ease-out),
+    height var(--motion-normal) var(--ease-out);
+}
+.has-selection-indicator > button:is([aria-pressed='true'], [aria-selected='true']) {
+  background: transparent;
+  border-color: transparent;
+}
+.filters .selection-indicator,
+.quota-tabs .selection-indicator {
+  border: 0;
+  border-radius: 999px;
+}
+.parameter-tabs .selection-indicator {
+  border: 0;
+}
+.library-tabs {
+  flex: none;
+  padding: 3px;
+  background: var(--soft);
+  border: 0;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+.library-tabs > button {
+  flex: 1;
+  min-width: 0;
+  padding-inline: 8px;
+}
+.library-tabs .selection-indicator {
+  border: 0;
+  border-radius: 9px;
+}
+.choice-segment[aria-pressed='true'] {
+  color: var(--ink);
+}
+
+/* Fixed outer frames keep tab changes and longer settings from moving controls. */
+#keyDlg {
+  padding: 0;
+  overflow: hidden;
+  max-height: calc(100dvh - 32px);
+}
+#settingsForm {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+}
+#settingsForm > .dialog-title {
+  flex: none;
+  margin: 0;
+  padding: 20px 24px 14px;
+}
+.settings-body {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0 24px;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+#settingsForm > .dialog-actions {
+  flex: none;
+  margin: 0;
+  padding: 14px 24px;
+  border-top: 1px solid var(--line);
+}
+.connection-transfer {
+  padding-block: 20px;
+  margin-block: 20px 0;
+  border-top: 1px solid var(--line);
+}
+.connection-transfer h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.connection-transfer p {
+  margin-bottom: 12px;
+}
+.connection-transfer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.connection-transfer-actions .btn {
+  font-size: 12px;
+  padding-inline: 10px;
+}
+.connection-transfer > small {
+  display: block;
+}
+.connection-file-error {
+  color: var(--danger);
+  min-height: 24px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.connection-file-dialog .field input {
+  width: 100%;
+}
+#libraryDlg {
+  height: min(700px, calc(100dvh - 32px));
+  overflow: hidden;
+  padding: 22px 24px 0;
+}
+#libraryDlg[open] {
+  display: flex;
+  flex-direction: column;
+}
+#libraryDlg > .dialog-title {
+  flex: none;
+}
+#libraryContent {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0 4px 24px 0;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+@supports (interpolate-size: allow-keywords) {
+  .settings-details,
+  .preserve-details,
+  .attempt-list {
+    interpolate-size: allow-keywords;
+  }
+  :is(.settings-details, .preserve-details, .attempt-list)::details-content {
+    block-size: 0;
+    opacity: 0;
+    overflow: clip;
+    transition:
+      block-size var(--motion-normal) var(--ease-out),
+      opacity 160ms,
+      content-visibility var(--motion-normal) allow-discrete;
+  }
+  :is(.settings-details, .preserve-details, .attempt-list)[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+}
+@media (max-width: 1100px) {
+  .workspace .gallery,
+  .batch-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .brandtext span {
+    display: none;
+  }
+}
+@media (max-width: 650px) {
+  .topbar {
+    padding-block: 14px;
+  }
+  .workspace {
+    padding-top: 12px;
+  }
+  .workspace .gallery,
+  .batch-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workspace-tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+  .workspace-tools > .inline {
+    grid-column: 1;
+  }
+  .workspace-tools > .search-wrap {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+  .workspace-tools > #selectionToggle {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .filters {
+    gap: 0;
+  }
+  .filter {
+    font-size: 12px;
+    padding-inline: 9px;
+  }
+  .gallery-title {
+    gap: 8px;
+  }
+  .composer-dock {
+    padding-top: 8px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  #libraryDlg {
+    padding: 18px 16px 0;
+  }
+  .library-tabs > button {
+    font-size: 12px;
+    padding-inline: 5px;
+  }
+  .settings-body {
+    padding-inline: 18px;
+  }
+  #settingsForm > .dialog-title {
+    padding: 18px 18px 12px;
+  }
+  #settingsForm > .dialog-actions {
+    padding: 12px 18px;
+  }
+  .library-item {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 420px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    position: relative;
+  }
+  .brand {
+    padding-top: 0;
+    min-height: 34px;
+  }
+  .top-actions {
+    width: 100%;
+    max-width: none;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+  }
+  .top-actions #keyBtn {
+    position: absolute;
+    top: 14px;
+    right: 0;
+  }
+  .top-actions .btn {
+    padding-inline: 6px;
+  }
+  .quota-trigger {
+    max-width: 105px;
+  }
+  .gallery-title {
+    flex-wrap: wrap;
+  }
+  .gallery-title #groupToggle {
+    margin-left: 0;
+  }
+  .filter {
+    padding-inline: 8px;
+  }
+}
+@media (max-height: 600px) {
+  .composer-inner {
+    max-height: 26dvh;
+  }
+  .composer-dock .hint {
+    display: none;
+  }
+  .composer-dock {
+    padding-bottom: 8px;
+  }
+  .welcome {
+    min-height: 180px;
+    padding-block: 16px;
+  }
+  .welcome-mark {
+    margin-bottom: 10px;
+    width: 30px;
+    height: 30px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 70ms;
+    --motion-normal: 70ms;
+  }
+  dialog,
+  .parameter-popover,
+  .select-popover {
+    transform: none !important;
+    transition-duration: 70ms;
+  }
+  .choice-tile .ratio-shape {
+    transform: none !important;
+  }
+  .selection-indicator {
+    transition: none;
+  }
+  .toast {
+    translate: none !important;
+  }
+  :is(.settings-details, .preserve-details, .attempt-list)::details-content {
+    transition: opacity 70ms;
+  }
+}
