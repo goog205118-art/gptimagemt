@@ -1,0 +1,862 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="个人 GPT Image 图像工作室，支持参考图、并行生成、局部编辑与自然扩图。"
+    />
+    <title>OpenLux · 个人图像工作室</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <svg class="brandmark" aria-hidden="true"><use href="#i-mark" /></svg>
+        <div class="brandtext">
+          <h1>OpenLux</h1>
+          <span>个人图像工作室</span>
+        </div>
+      </div>
+      <nav class="top-actions" aria-label="工作室工具">
+        <button class="btn quota-trigger" id="quotaBtn">
+          <span class="quota-dot" aria-hidden="true"></span
+          ><span id="quotaButtonLabel">账户余额</span></button
+        ><button class="btn" id="libraryBtn">素材与预设</button
+        ><button class="btn" id="queueBtn">队列 <span id="queueCount">0</span></button
+        ><button class="btn" id="newBtn" title="开始新的创作">
+          <svg aria-hidden="true"><use href="#i-plus" /></svg
+          ><span class="new-label">新的创作</span></button
+        ><button class="btn outlined" id="keyBtn">
+          <span class="key-dot" id="keyDot"></span><span id="keyLabel">连接 API</span>
+        </button>
+      </nav>
+    </header>
+    <main>
+      <section class="workspace" aria-label="生成作品">
+        <div class="storage-note" id="storageNote" role="status" hidden></div>
+        <div class="workspace-tools">
+          <div class="inline">
+            <select id="projectFilter" aria-label="筛选项目">
+              <option value="all">全部项目</option></select
+            ><button class="icon-btn" id="projectsBtn" aria-label="管理项目" title="管理项目">
+              <svg aria-hidden="true"><use href="#i-plus" /></svg>
+            </button>
+          </div>
+          <div class="search-wrap">
+            <input
+              type="search"
+              id="search"
+              placeholder="搜索提示词、名称、变量…"
+              aria-label="搜索作品"
+            />
+          </div>
+          <button class="btn" id="selectionToggle" aria-pressed="false">多选</button>
+        </div>
+        <div class="gallery-head" id="galleryHead" hidden>
+          <div class="gallery-title">
+            <h2>你的创作</h2>
+            <span class="queue-summary" id="queueSummary"></span
+            ><button class="btn" id="groupToggle" aria-pressed="false">按创作分组</button>
+          </div>
+          <div class="inline gallery-controls">
+            <div class="filters" role="group" aria-label="筛选作品">
+              <button class="filter" data-filter="all" aria-pressed="true">全部</button
+              ><button class="filter" data-filter="active" aria-pressed="false">进行中</button
+              ><button class="filter" data-filter="favorite" aria-pressed="false">收藏</button
+              ><button class="filter" data-filter="failed" aria-pressed="false">待处理</button
+              ><button class="filter" data-filter="discarded" aria-pressed="false">淘汰</button>
+            </div>
+            <button
+              class="icon-btn"
+              id="clearBtn"
+              title="清理当前项目已结束记录"
+              aria-label="清理当前项目已结束记录"
+            >
+              <svg aria-hidden="true"><use href="#i-trash" /></svg>
+            </button>
+          </div>
+        </div>
+        <div class="bulkbar" id="bulkBar" hidden>
+          <span id="selectedCount">已选 0 张</span
+          ><button class="btn" id="selectAllBtn">全选当前</button
+          ><button class="btn" id="compareBtn">对比两张</button
+          ><button class="btn" id="zipBtn">打包下载</button
+          ><button class="btn" id="bulkFavorite">收藏</button
+          ><button class="btn" id="bulkDiscard">淘汰</button
+          ><button class="btn" id="bulkRetry">重试失败</button
+          ><button class="btn" id="bulkDelete">删除</button
+          ><button class="btn" id="selectionDone">完成</button>
+        </div>
+        <div class="welcome" id="welcome">
+          <svg class="welcome-mark" aria-hidden="true"><use href="#i-mark" /></svg>
+          <h2>把想法，变成画面。</h2>
+          <p>从一段描述或几张参考图开始。<br />选出喜欢的一张，再慢慢改到满意。</p>
+          <div class="starters">
+            <button data-starter="product">极简产品摄影</button
+            ><button data-starter="poster">一张电影海报</button
+            ><button id="starterReference">从参考图开始</button>
+          </div>
+        </div>
+        <div id="gallery" class="gallery" aria-label="图片与生成任务"></div>
+        <button class="btn outlined load-more" id="loadMore" hidden>显示更多作品</button>
+      </section>
+      <section class="composer-dock" aria-label="创作输入">
+        <form class="composer" id="composer">
+          <div class="composer-content" id="composerContent">
+            <div class="composer-inner">
+              <div class="edit-context" id="editContext" hidden>
+                <img id="editThumb" alt="正在编辑的版本" />
+                <div><strong id="editTitle"></strong><span id="editSubtitle"></span></div>
+                <button type="button" class="btn" id="editMaskBtn">涂抹局部</button
+                ><button type="button" class="icon-btn" id="exitEdit" aria-label="退出当前编辑">
+                  <svg aria-hidden="true"><use href="#i-close" /></svg>
+                </button>
+              </div>
+              <div class="composer-label">
+                <label for="prompt" id="promptLabel">画面描述</label>
+                <div class="inline">
+                  <span id="draftSaved">草稿自动保存</span
+                  ><button type="button" id="savePresetBtn">存为预设</button
+                  ><button type="button" id="clearRefs" hidden>清空参考图</button>
+                </div>
+              </div>
+              <div class="refs" id="refs" hidden aria-label="当前参考图"></div>
+              <textarea
+                id="prompt"
+                placeholder="描述你想看到的画面，也可以直接拖入或粘贴参考图…"
+                maxlength="32000"
+              ></textarea>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="composer-peek"
+            id="composerPeek"
+            aria-controls="composerContent"
+            aria-expanded="false"
+          >
+            <span id="collapsedPrompt">写下想法，或拖入参考图…</span
+            ><small id="collapsedRefs"></small
+            ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 10 4-4 4 4" /></svg>
+          </button>
+          <div class="composer-toolbar">
+            <button
+              class="icon-btn attachment"
+              type="button"
+              id="addRef"
+              title="添加参考图（支持拖入 / 粘贴）"
+              aria-label="添加参考图"
+            >
+              <svg aria-hidden="true"><use href="#i-plus" /></svg>
+            </button>
+            <button
+              type="button"
+              class="generation-summary"
+              id="advancedToggle"
+              aria-label="打开生成设置"
+              aria-expanded="false"
+              aria-haspopup="dialog"
+              aria-controls="advanced"
+            >
+              <svg aria-hidden="true"><use href="#i-settings" /></svg
+              ><span class="summary-model" id="summaryModel">GPT Image 2</span
+              ><span class="summary-divider" aria-hidden="true"></span
+              ><span id="summarySize">1:1</span
+              ><span class="summary-extra" id="summaryQuality">标准</span
+              ><span class="summary-count" id="summaryCount">×1</span
+              ><svg class="summary-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="m4 10 4-4 4 4" />
+              </svg></button
+            ><span class="toolbar-spacer"></span>
+            <button type="submit" class="send-btn" id="genBtn" aria-label="生成图片" disabled>
+              <span class="send-label" id="sendLabel">生成图片</span
+              ><svg aria-hidden="true"><use href="#i-arrow" /></svg>
+            </button>
+          </div>
+          <div
+            class="parameter-popover"
+            id="advanced"
+            popover="manual"
+            role="dialog"
+            aria-label="生成设置"
+            hidden
+          >
+            <div class="parameter-heading">
+              <h2>生成设置</h2>
+              <button type="button" class="icon-btn" id="parameterClose" aria-label="关闭生成设置">
+                <svg aria-hidden="true"><use href="#i-close" /></svg>
+              </button>
+            </div>
+            <div class="parameter-tabs" role="tablist" aria-label="设置类别">
+              <button
+                type="button"
+                id="tab-image"
+                role="tab"
+                aria-controls="pane-image"
+                aria-selected="true"
+                data-param-tab="image"
+              >
+                画面</button
+              ><button
+                type="button"
+                id="tab-output"
+                role="tab"
+                aria-controls="pane-output"
+                aria-selected="false"
+                tabindex="-1"
+                data-param-tab="output"
+              >
+                输出</button
+              ><button
+                type="button"
+                id="tab-task"
+                role="tab"
+                aria-controls="pane-task"
+                aria-selected="false"
+                tabindex="-1"
+                data-param-tab="task"
+              >
+                任务</button
+              ><button
+                type="button"
+                id="tab-batch"
+                role="tab"
+                aria-controls="pane-batch"
+                aria-selected="false"
+                tabindex="-1"
+                data-param-tab="batch"
+              >
+                批量
+              </button>
+            </div>
+            <div class="parameter-body">
+              <section
+                id="pane-image"
+                role="tabpanel"
+                aria-labelledby="tab-image"
+                class="parameter-pane"
+              >
+                <div class="parameter-field">
+                  <label for="model">模型</label
+                  ><select id="model" aria-label="生成模型">
+                    <option value="gpt-image-2">GPT Image 2</option>
+                    <option value="gpt-image-2-c">GPT Image 2 · C</option>
+                    <option value="gpt-image-2.5-sunburst">GPT Image 2.5 Sunburst</option>
+                    <option value="gpt-image-2.5-flare">GPT Image 2.5 Flare</option>
+                  </select>
+                  <p class="parameter-help" id="modelProfileHint" hidden></p>
+                </div>
+                <div class="parameter-field">
+                  <label id="ratioLabel" for="size">画面比例</label
+                  ><select id="size" data-choice-source aria-label="图片尺寸">
+                    <option value="1024x1024">1:1 · 1024</option>
+                    <option value="1536x1024">3:2 · 横版</option>
+                    <option value="1024x1536">2:3 · 竖版</option>
+                    <option value="2160x3840">9:16 · 4K</option>
+                    <option value="auto">自动尺寸</option>
+                  </select>
+                  <div
+                    class="choice-grid ratio-choices"
+                    data-choices="size"
+                    role="group"
+                    aria-labelledby="ratioLabel"
+                  ></div>
+                </div>
+                <div class="parameter-field inline-field">
+                  <label id="qualityLabel" for="quality">质量</label
+                  ><select id="quality" data-choice-source aria-label="生成质量">
+                    <option value="low">快速预览</option>
+                    <option value="medium" selected>标准质量</option>
+                    <option value="high">高质量</option>
+                    <option value="auto">自动质量</option>
+                  </select>
+                  <div
+                    class="choice-grid segment-choices"
+                    data-choices="quality"
+                    role="group"
+                    aria-labelledby="qualityLabel"
+                  ></div>
+                </div>
+                <div class="parameter-field inline-field">
+                  <label id="countLabel" for="n">张数</label
+                  ><input
+                    type="number"
+                    id="n"
+                    min="1"
+                    max="4"
+                    value="1"
+                    data-choice-source
+                    hidden
+                  />
+                  <div
+                    class="choice-grid segment-choices"
+                    data-choices="n"
+                    role="group"
+                    aria-labelledby="countLabel"
+                  ></div>
+                </div>
+                <p class="parameter-help" id="qualityNote"></p>
+                <details class="preserve-details">
+                  <summary>保持哪些内容</summary>
+                  <input
+                    id="constraints"
+                    type="text"
+                    aria-label="需要保持的内容"
+                    placeholder="如：产品外形、Logo、材质保持不变"
+                    maxlength="2000"
+                  />
+                </details>
+                <p class="parameter-help" id="promptBudget"></p>
+              </section>
+              <section
+                id="pane-output"
+                role="tabpanel"
+                aria-labelledby="tab-output"
+                class="parameter-pane"
+                hidden
+              >
+                <div class="parameter-field">
+                  <label id="formatLabel" for="format">图片格式</label
+                  ><select id="format" data-choice-source>
+                    <option value="png">PNG</option>
+                    <option value="jpeg">JPEG</option>
+                    <option value="webp">WebP</option>
+                  </select>
+                  <div
+                    class="choice-grid segment-choices"
+                    data-choices="format"
+                    role="group"
+                    aria-labelledby="formatLabel"
+                  ></div>
+                </div>
+                <div class="parameter-field">
+                  <label id="backgroundLabel" for="background">背景</label
+                  ><select id="background" data-choice-source>
+                    <option value="auto">自动</option>
+                    <option value="opaque">不透明</option>
+                    <option value="transparent">透明</option>
+                  </select>
+                  <div
+                    class="choice-grid segment-choices"
+                    data-choices="background"
+                    role="group"
+                    aria-labelledby="backgroundLabel"
+                  ></div>
+                </div>
+                <div class="parameter-field">
+                  <label for="compression">JPEG / WebP 品质</label>
+                  <div class="number-stepper">
+                    <button
+                      type="button"
+                      data-step-for="compression"
+                      data-step="-5"
+                      aria-label="降低图片品质"
+                    >
+                      −</button
+                    ><input id="compression" type="number" min="0" max="100" value="90" /><button
+                      type="button"
+                      data-step-for="compression"
+                      data-step="5"
+                      aria-label="提高图片品质"
+                    >
+                      ＋
+                    </button>
+                  </div>
+                  <p class="parameter-help">PNG 使用无损输出；透明背景需模型和路由支持。</p>
+                </div>
+              </section>
+              <section
+                id="pane-task"
+                role="tabpanel"
+                aria-labelledby="tab-task"
+                class="parameter-pane"
+                hidden
+              >
+                <div class="parameter-field">
+                  <label for="draftProject">保存到项目</label
+                  ><select id="draftProject"></select>
+                </div>
+                <div class="parameter-field">
+                  <label for="route">路由</label
+                  ><select id="route">
+                    <option value="">默认路由</option>
+                    <option value="-fast">fast · 价格优先</option>
+                    <option value="-intx">intx · 速度优先</option>
+                    <option value="-stable">stable · 稳定优先</option>
+                  </select>
+                </div>
+                <div class="parameter-two-col">
+                  <div class="parameter-field">
+                    <label for="concurrency">同时生成</label>
+                    <div class="number-stepper">
+                      <button
+                        type="button"
+                        data-step-for="concurrency"
+                        data-step="-1"
+                        aria-label="减少并行数量"
+                      >
+                        −</button
+                      ><input type="number" id="concurrency" min="1" max="8" value="3" /><button
+                        type="button"
+                        data-step-for="concurrency"
+                        data-step="1"
+                        aria-label="增加并行数量"
+                      >
+                        ＋
+                      </button>
+                    </div>
+                  </div>
+                  <div class="parameter-field">
+                    <label for="timeout">超时 · 秒</label>
+                    <div class="number-stepper">
+                      <button
+                        type="button"
+                        data-step-for="timeout"
+                        data-step="-30"
+                        aria-label="缩短超时"
+                      >
+                        −</button
+                      ><input type="number" id="timeout" min="30" max="1800" value="300" /><button
+                        type="button"
+                        data-step-for="timeout"
+                        data-step="30"
+                        aria-label="延长超时"
+                      >
+                        ＋
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <p class="parameter-help">达到并行上限后，其他图片会自动排队。</p>
+                <p class="parameter-help" id="modelTimeoutHint"></p>
+              </section>
+              <section
+                id="pane-batch"
+                role="tabpanel"
+                aria-labelledby="tab-batch"
+                class="parameter-pane"
+                hidden
+              >
+                <div class="parameter-field">
+                  <label for="variantAxis">变化维度</label
+                  ><select id="variantAxis">
+                    <option value="">不使用变量</option>
+                    <option value="背景">背景</option>
+                    <option value="光线">光线</option>
+                    <option value="构图">构图</option>
+                    <option value="配色">配色</option>
+                    <option value="自定义方案">自定义方案</option>
+                  </select>
+                </div>
+                <div class="parameter-field">
+                  <label for="variants">每行一个方案 · 最多 8 个</label
+                  ><textarea
+                    id="variants"
+                    rows="3"
+                    placeholder="浅灰纯色背景&#10;木质桌面与窗边植物"
+                    maxlength="4000"
+                  ></textarea>
+                </div>
+                <p class="parameter-help">每个方案按“画面”中的张数生成，合计最多 32 张。</p>
+                <div class="parameter-tools">
+                  <button type="button" class="btn outlined" id="localEditorBtn">
+                    裁切 / 适配比例</button
+                  ><button type="button" class="btn outlined" id="saveAssetsBtn">
+                    保存参考素材包
+                  </button>
+                </div>
+              </section>
+            </div>
+            <div class="parameter-footer">
+              <span id="estimate">本次 1 张 · 每张独立请求</span
+              ><button type="button" class="btn" id="parameterDone">完成</button>
+            </div>
+          </div>
+        </form>
+        <div class="hint">
+          <span class="status" id="status" role="status"
+            >拖入 / 粘贴参考图 · 可连续提交，并行生成</span
+          ><span class="shortcut"><kbd>Ctrl / ⌘ + Enter</kbd> 生成</span>
+        </div>
+      </section>
+    </main>
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/png,image/jpeg,image/webp"
+      multiple
+      hidden
+    /><input type="file" id="backupInput" accept="application/json,.json" hidden />
+    <div class="drop-overlay" id="dropOverlay" hidden>
+      <svg aria-hidden="true"><use href="#i-image" /></svg><span>松手，添加为参考图</span
+      ><small>PNG、JPG、WebP · 最多 16 张</small>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <dialog id="keyDlg" aria-labelledby="keyTitle">
+      <form id="settingsForm">
+        <div class="dialog-title">
+          <h2 id="keyTitle">连接与偏好</h2>
+          <button type="button" class="icon-btn" data-close="keyDlg" aria-label="关闭设置">
+            <svg aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <p>沿用你的 OpenLux 连接。生成时，提示词与参考图发送至指定接口。</p>
+        <div class="field">
+          <label for="baseInput">API 地址</label
+          ><input type="url" id="baseInput" required spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="keyInput">API Key</label>
+          <div class="password-wrap">
+            <input
+              type="password"
+              id="keyInput"
+              placeholder="sk-…"
+              autocomplete="off"
+              spellcheck="false"
+            /><button type="button" class="btn" id="showKey">显示</button>
+          </div>
+        </div>
+        <label class="check"
+          ><input type="checkbox" id="rememberKey" /><span
+            >在当前浏览器记住 Key<br /><small>取消后仅在本次打开期间使用。</small></span
+          ></label
+        >
+        <details class="settings-details">
+          <summary>模型与计费估算</summary>
+          <div class="field">
+            <label for="customModel">添加 GPT 生图模型 ID</label>
+            <div class="password-wrap">
+              <input type="text" id="customModel" placeholder="如 gpt-image-2.5-sunburst" /><button
+                type="button"
+                class="btn"
+                id="addModelBtn"
+              >
+                添加
+              </button>
+            </div>
+          </div>
+          <div class="inline">
+            <button class="btn outlined" type="button" id="fetchModels">读取 GPT 生图模型</button
+            ><span id="modelsStatus" class="muted"></span>
+          </div>
+          <p class="tiny-note">
+            只保留 GPT Image
+            生图系列；按各模型适配尺寸、质量、保真与蒙版。实际能力仍以当前渠道为准。
+          </p>
+          <div class="field">
+            <label for="priceCurrency">估算币种</label
+            ><select id="priceCurrency">
+              <option value="CNY">人民币 CNY</option>
+              <option value="USD">美元 USD</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="priceRules">每张价格（每行：模型含路由 = 价格）</label
+            ><textarea
+              id="priceRules"
+              rows="4"
+              placeholder="gpt-image-2 = 0.20&#10;gpt-image-2.5-flare = 0.15"
+            ></textarea
+            ><small>按你的服务商价格填写，仅用于估算，不代表实际账单。未填写时不估价。</small>
+          </div>
+          <label class="check"
+            ><input type="checkbox" id="autoRateRetry" checked /><span
+              >限流时自动延后重试（最多 3 次）</span
+            ></label
+          >
+        </details>
+        <div class="dialog-actions">
+          <button type="button" class="btn" data-close="keyDlg">取消</button
+          ><button type="submit" class="btn primary">保存连接</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="libraryDlg" class="wide-dialog" aria-labelledby="libraryTitle">
+      <div class="dialog-title">
+        <h2 id="libraryTitle">素材与预设</h2>
+        <button class="icon-btn" data-close="libraryDlg" aria-label="关闭素材库">
+          <svg aria-hidden="true"><use href="#i-close" /></svg>
+        </button>
+      </div>
+      <div class="library-tabs" role="group" aria-label="素材库类别">
+        <button class="btn" data-library-tab="presets" aria-pressed="true">个人预设</button
+        ><button class="btn" data-library-tab="assets" aria-pressed="false">素材包</button
+        ><button class="btn" data-library-tab="projects" aria-pressed="false">项目</button
+        ><button class="btn" data-library-tab="usage" aria-pressed="false">用量与备份</button>
+      </div>
+      <div id="libraryContent"></div>
+    </dialog>
+
+    <dialog id="nameDlg" aria-labelledby="nameTitle">
+      <form id="nameForm">
+        <div class="dialog-title">
+          <h2 id="nameTitle">命名</h2>
+          <button type="button" class="icon-btn" data-close="nameDlg" aria-label="关闭">
+            <svg aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <div class="field">
+          <label id="nameLabel" for="nameInput">名称</label
+          ><input type="text" id="nameInput" maxlength="80" required />
+        </div>
+        <div class="dialog-actions">
+          <button class="btn" type="button" data-close="nameDlg">取消</button
+          ><button type="submit" class="btn primary">保存</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="confirmDlg" aria-labelledby="confirmTitle">
+      <h2 id="confirmTitle">确认操作</h2>
+      <p id="confirmText" style="margin-top: 12px"></p>
+      <div class="dialog-actions">
+        <button class="btn" id="confirmCancel">取消</button
+        ><button class="btn primary" id="confirmClear">确认</button>
+      </div>
+    </dialog>
+
+    <dialog id="detailDlg" class="detail-dialog" aria-labelledby="detailTitle">
+      <div class="dialog-title">
+        <h2 id="detailTitle">作品与版本</h2>
+        <button class="icon-btn" data-close="detailDlg" aria-label="关闭作品详情">
+          <svg aria-hidden="true"><use href="#i-close" /></svg>
+        </button>
+      </div>
+      <div class="detail-layout">
+        <div>
+          <div class="detail-media" id="detailMedia"></div>
+          <div class="detail-actions" id="detailActions"></div>
+          <label class="field detail-name"
+            ><span>作品名称</span><input id="taskNameInput" type="text" maxlength="80"
+          /></label>
+          <div id="detailInfo"></div>
+        </div>
+        <aside class="version-panel">
+          <h3>版本分支</h3>
+          <p class="tiny-note">选择任一版本，可从这里继续修改。</p>
+          <div id="versionList"></div>
+        </aside>
+      </div>
+    </dialog>
+
+    <dialog id="queueDlg" class="wide-dialog" aria-labelledby="queueTitle">
+      <div class="dialog-title">
+        <h2 id="queueTitle">任务队列</h2>
+        <button class="icon-btn" data-close="queueDlg" aria-label="关闭队列">
+          <svg aria-hidden="true"><use href="#i-close" /></svg>
+        </button>
+      </div>
+      <div class="queue-toolbar">
+        <button class="btn outlined" id="pauseQueue">暂停队列</button
+        ><span class="muted" id="queueStatus"></span>
+      </div>
+      <p class="tiny-note">
+        暂停只阻止后续任务启动；正在生成的图片会继续。超时和断网不会自动重复提交。
+      </p>
+      <div id="queueList"></div>
+    </dialog>
+
+    <dialog id="compareDlg" class="compare-dialog" aria-labelledby="compareTitle">
+      <div class="dialog-title">
+        <h2 id="compareTitle">图片对比</h2>
+        <button class="icon-btn" data-close="compareDlg" aria-label="关闭对比">
+          <svg aria-hidden="true"><use href="#i-close" /></svg>
+        </button>
+      </div>
+      <div class="compare-toolbar">
+        <div class="inline">
+          <button class="btn outlined" data-compare-mode="side">并排</button
+          ><button class="btn" data-compare-mode="slider">前后滑动</button>
+        </div>
+        <label class="inline"
+          >缩放 <input id="compareZoom" type="range" min="1" max="5" step="0.1" value="1" /><span
+            id="compareZoomText"
+            >100%</span
+          ></label
+        ><button class="btn" id="compareReset">复位</button>
+      </div>
+      <div class="compare-labels">
+        <span id="compareLabelA"></span><span id="compareLabelB"></span>
+      </div>
+      <div class="compare-side" id="compareSide">
+        <div class="compare-stage" data-pan>
+          <img id="compareA" alt="对比图片 A" draggable="false" />
+        </div>
+        <div class="compare-stage" data-pan>
+          <img id="compareB" alt="对比图片 B" draggable="false" />
+        </div>
+      </div>
+      <div class="compare-overlay" id="compareOverlay" data-pan hidden>
+        <img id="compareBase" alt="修改前" draggable="false" />
+        <div id="compareClip"><img id="compareTop" alt="修改后" draggable="false" /></div>
+        <div id="compareLine"></div>
+      </div>
+      <label class="slider-label" id="compareSliderLabel" hidden
+        >显示修改后区域 <input type="range" id="compareSlider" min="0" max="100" value="50"
+      /></label>
+      <p class="tiny-note">拖动画面同步平移；滚轮或滑杆同步缩放。</p>
+    </dialog>
+
+    <dialog id="editorDlg" class="editor-dialog" aria-labelledby="editorTitle">
+      <div class="dialog-title">
+        <h2 id="editorTitle">局部修改与比例适配</h2>
+        <button class="icon-btn" data-close="editorDlg" aria-label="关闭编辑器">
+          <svg aria-hidden="true"><use href="#i-close" /></svg>
+        </button>
+      </div>
+      <div class="editor-body">
+        <div class="editor-tabs">
+          <button class="btn outlined" data-editor-mode="mask">涂抹局部</button
+          ><button class="btn" data-editor-mode="crop">裁切</button
+          ><button class="btn" data-editor-mode="expand">扩展画布</button>
+        </div>
+        <div class="editor-toolbar" id="maskTools">
+          <label class="inline"
+            >画笔 <input id="brushSize" type="range" min="5" max="180" value="45" /></label
+          ><button class="btn" id="eraserBtn" aria-pressed="false">橡皮</button
+          ><button class="btn" id="undoMask">撤销</button
+          ><button class="btn" id="clearMask">清空涂抹</button
+          ><label class="inline"
+            >蒙版模式
+            <select id="maskMode">
+              <option value="auto">智能兼容</option>
+              <option value="guided">选区引导</option>
+              <option value="native">原生蒙版</option>
+            </select></label
+          ><label class="check mask-protect"
+            ><input id="maskKeepOutside" type="checkbox" checked /><span
+              >保留未涂抹区域</span
+            ></label
+          >
+        </div>
+        <div class="editor-toolbar" id="ratioTools" hidden>
+          <label class="inline"
+            >目标比例
+            <select id="editorRatio">
+              <option value="1:1">1:1</option>
+              <option value="3:2">3:2</option>
+              <option value="2:3">2:3</option>
+              <option value="16:9">16:9</option>
+              <option value="9:16">9:16</option>
+            </select></label
+          ><label class="inline" id="cropZoomLabel"
+            >裁切缩放
+            <input id="cropZoom" type="range" min="1" max="3" step="0.05" value="1" /></label
+          ><label class="inline" id="expandScaleLabel" hidden
+            >原图占比
+            <input id="expandScale" type="range" min="0.35" max="1" step="0.05" value="1" /></label
+          ><label class="inline" id="expandAIWrap" hidden
+            ><input type="checkbox" id="expandAI" checked />AI 补全空白</label
+          >
+        </div>
+        <div id="outpaintOptions" class="outpaint-options" hidden>
+          <label class="inline"
+            >扩图方式
+            <select id="outpaintPolicy">
+              <option value="natural">自然重构（推荐）</option>
+              <option value="preserve">原图优先</option>
+            </select></label
+          ><input
+            id="outpaintIntent"
+            type="text"
+            maxlength="240"
+            aria-label="新区域的内容"
+            placeholder="新区域想出现什么？如：左侧补出过道，右侧留出窗边空间（可选）"
+          />
+          <p id="outpaintPolicyHelp" class="tiny-note">
+            自然重构使用完整生成画面，优先保持空间、光色与透视连续；原图细节可能轻微变化。
+          </p>
+        </div>
+        <div class="editor-stage">
+          <canvas id="editorCanvas" aria-label="图片编辑画布"></canvas>
+        </div>
+        <p id="editorHint" class="tiny-note"></p>
+        <p id="gptMaskAdvice" class="tiny-note"></p>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" data-close="editorDlg">取消</button
+        ><button class="btn" id="downloadLocalEditor" hidden>下载本地图片</button
+        ><button class="btn primary" id="applyEditor">应用到输入框</button>
+      </div>
+    </dialog>
+
+    <dialog id="quotaDlg" class="quota-dialog" aria-labelledby="quotaTitle">
+      <div class="quota-header">
+        <div class="dialog-title">
+          <h2 id="quotaTitle">额度与余额</h2>
+          <button type="button" class="icon-btn" data-close="quotaDlg" aria-label="关闭额度查询">
+            <svg aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <div class="quota-tabs">
+          <button type="button" class="btn" data-quota-mode="key" aria-pressed="true">
+            当前 Key</button
+          ><button type="button" class="btn" data-quota-mode="account" aria-pressed="false">
+            账户余额
+          </button>
+        </div>
+      </div>
+      <div class="quota-scroll">
+        <div class="quota-value">
+          <span id="quotaModeLabel">当前 Key 剩余额度</span><strong id="quotaValue">—</strong>
+        </div>
+        <div class="quota-breakdown">
+          <div><span>累计已用</span><strong id="quotaUsed">—</strong></div>
+          <div><span>有效期 / 来源</span><strong id="quotaExpiry">—</strong></div>
+        </div>
+        <p class="tiny-note" id="quotaStatus" role="status" aria-live="polite">尚未查询</p>
+        <div id="accountQuotaFields" hidden>
+          <p class="tiny-note">账户余额需要系统访问令牌和数字用户 ID；生图 Key 不能代替。</p>
+          <div class="field">
+            <label for="accountUserId">用户 ID</label
+            ><input
+              id="accountUserId"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              placeholder="个人设置页显示的数字 ID"
+            />
+          </div>
+          <div class="field">
+            <label for="accountToken">系统访问令牌</label
+            ><input
+              id="accountToken"
+              type="password"
+              autocomplete="off"
+              placeholder="用于只读账户额度查询"
+            />
+          </div>
+          <label class="check quota-remember"
+            ><input id="rememberQuota" type="checkbox" checked /><span
+              >在当前浏览器记住查询凭据<br /><small
+                >自动保存令牌和用户 ID，不写入作品备份。</small
+              ></span
+            ></label
+          >
+          <div class="quota-credential-actions">
+            <button type="button" class="btn" id="accountClear">清除已保存凭据</button
+            ><a
+              class="quota-doc"
+              href="https://doc.openlux.ai/tutorials/00-intro"
+              target="_blank"
+              rel="noopener noreferrer"
+              >配置说明 ↗</a
+            >
+          </div>
+        </div>
+        <p class="tiny-note quota-connection-note">
+          已保存账户查询凭据时，打开工具会刷新一次；也可手动刷新，不在后台轮询。
+        </p>
+      </div>
+      <div class="quota-footer">
+        <small id="quotaTimestamp">点击刷新获取最新额度</small
+        ><button type="button" class="btn primary" id="quotaRefresh">刷新额度</button>
+      </div>
+    </dialog>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

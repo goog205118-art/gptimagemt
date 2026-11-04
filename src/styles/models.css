@@ -1,0 +1,249 @@
+.quota-trigger {
+  max-width: 170px;
+  gap: 7px;
+}
+.quota-dot {
+  width: 6px;
+  height: 6px;
+  background: #777;
+  border-radius: 50%;
+  flex: none;
+}
+.quota-trigger span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quota-dialog {
+  width: min(470px, calc(100% - 32px));
+}
+.quota-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--soft);
+  border-radius: 12px;
+  margin-bottom: 26px;
+}
+.quota-tabs .btn {
+  flex: 1;
+  min-height: 34px;
+  font-size: 13px;
+}
+.quota-tabs .btn[aria-pressed="true"] {
+  background: var(--surface);
+}
+.quota-value {
+  padding: 0 0 24px;
+}
+.quota-value > span {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+}
+.quota-value strong {
+  display: block;
+  font-size: 30px;
+  font-weight: 500;
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+}
+.quota-breakdown {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.quota-breakdown span {
+  font-size: 12px;
+  color: var(--muted);
+  display: block;
+}
+.quota-breakdown strong {
+  font-size: 14px;
+  font-weight: 500;
+  display: block;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.quota-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 16px;
+}
+.quota-footer small {
+  font-size: 12px;
+}
+.quota-doc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 12px;
+}
+.mask-protect {
+  margin-left: auto;
+  align-items: center;
+  font-size: 12px;
+}
+.mask-protect input {
+  margin: 0;
+}
+.parameter-help#gptMaskAdvice {
+  font-size: 12px;
+}
+.parameter-pane #modelProfileHint {
+  margin-top: 0;
+  line-height: 1.7;
+}
+.parameter-pane #qualityNote {
+  margin: -8px 0 0;
+}
+.parameter-pane #promptBudget {
+  margin-top: -6px;
+}
+.result-warning {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #8b512a;
+  background: #faf7f3;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.mask-protected-tag {
+  font-size: 11px;
+  color: var(--muted);
+}
+.parameter-pane .segment-choices[data-choices="quality"]:has(> button:nth-child(5)) {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 650px) {
+  .top-actions .quota-trigger {
+    max-width: 130px;
+  }
+  .quota-trigger {
+    font-size: 12px;
+  }
+  .quota-value strong {
+    font-size: 26px;
+  }
+  .quota-footer {
+    gap: 8px;
+  }
+  .quota-footer .btn {
+    font-size: 12px;
+  }
+  .mask-protect {
+    margin-left: 0;
+  }
+  .quota-breakdown {
+    gap: 12px;
+  }
+}
+.parameter-popover {
+  width: min(400px, calc(100vw - 24px));
+  height: min(660px, calc(100dvh - 24px));
+}
+.parameter-body {
+  flex: 1;
+  scrollbar-gutter: stable;
+}
+.parameter-footer {
+  min-height: 52px;
+}
+.parameter-pane {
+  padding-top: 4px;
+}
+.parameter-heading,
+.parameter-tabs,
+.parameter-footer {
+  flex-shrink: 0;
+}
+.quota-dialog {
+  padding: 0;
+  height: min(710px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+}
+.quota-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.quota-header {
+  padding: 22px 24px 0;
+  flex: none;
+}
+.quota-header .dialog-title {
+  margin-bottom: 18px;
+}
+.quota-header .quota-tabs {
+  margin-bottom: 0;
+}
+.quota-scroll {
+  padding: 24px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.quota-dialog .quota-footer {
+  padding: 14px 24px;
+  margin: 0;
+  flex: none;
+  min-height: 68px;
+}
+.quota-dialog #quotaStatus {
+  min-height: 42px;
+  margin-top: 16px;
+  overflow-wrap: anywhere;
+}
+.quota-remember {
+  align-items: flex-start;
+  margin: 18px 0 8px;
+}
+.quota-remember small {
+  line-height: 1.7;
+}
+.quota-credential-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.quota-credential-actions .btn {
+  font-size: 12px;
+  padding-left: 0;
+}
+.quota-credential-actions .quota-doc {
+  margin: 0;
+}
+.quota-connection-note {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+}
+.quota-dialog .field {
+  margin: 14px 0;
+}
+@media (max-width: 540px) {
+  .quota-header {
+    padding: 18px 20px 0;
+  }
+  .quota-scroll {
+    padding: 20px;
+  }
+  .quota-dialog .quota-footer {
+    padding: 12px 20px;
+  }
+  .quota-header .dialog-title {
+    margin-bottom: 12px;
+  }
+  .quota-tabs .btn {
+    min-height: 34px;
+  }
+}

@@ -1,0 +1,311 @@
+/* Quiet scrollbars across the gallery, dialogs, text fields, menus and editors. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #929292 transparent;
+}
+@supports selector(::-webkit-scrollbar) {
+  :root * {
+    scrollbar-width: auto !important;
+    scrollbar-color: auto !important;
+  }
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #929292;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: #707070;
+  }
+  *::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+.workspace,
+.parameter-body,
+.picker-list,
+.quota-scroll,
+.composer-inner,
+dialog {
+  scrollbar-gutter: stable;
+}
+.composer {
+  padding: 12px 16px 10px;
+  max-height: none;
+  overflow: visible;
+  transition:
+    border-color 0.18s,
+    padding 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.composer-content {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.18s;
+}
+.composer-inner {
+  min-height: 0;
+  max-height: min(290px, 34dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1px 2px 0;
+}
+.composer #prompt {
+  height: 64px;
+  min-height: 48px;
+  max-height: 120px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  line-height: 1.65;
+}
+.composer .edit-context {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+.composer .edit-context img {
+  width: 34px;
+  height: 34px;
+}
+.composer .refs {
+  flex-wrap: nowrap;
+  max-height: 138px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 5px 3px 4px;
+}
+.composer .reference {
+  flex: none;
+  width: 116px;
+  padding: 5px;
+  border-radius: 10px;
+}
+.composer .reference-main {
+  height: 48px;
+  margin-bottom: 4px;
+}
+.composer .reference img {
+  height: 48px;
+}
+.composer .reference .picker-button {
+  min-height: 23px;
+  padding: 3px 5px;
+}
+.composer .reference input {
+  height: 24px !important;
+}
+.composer .ref-order {
+  margin-top: 1px;
+}
+.composer-peek {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 0;
+  opacity: 0;
+  overflow: hidden;
+  text-align: left;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 0 2px;
+  transition:
+    height 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.16s;
+  pointer-events: none;
+}
+.composer-peek > span:first-child {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-peek small {
+  font-size: 11px;
+  flex: none;
+}
+.composer-peek svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.composer.is-collapsed {
+  padding-top: 9px;
+}
+.composer.is-collapsed .composer-content {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+.composer.is-collapsed .composer-inner {
+  overflow: hidden;
+}
+.composer.is-collapsed .composer-peek {
+  height: 30px;
+  opacity: 1;
+  margin-bottom: 6px;
+  pointer-events: auto;
+}
+.composer.is-collapsed .composer-peek:hover {
+  color: var(--ink);
+}
+.composer-dock .hint {
+  font-size: 11px;
+  margin-top: 7px;
+}
+.composer-dock {
+  padding-bottom: 10px;
+}
+.detail-dialog {
+  padding: 0;
+  overflow: hidden;
+  max-height: calc(100dvh - 32px);
+}
+.detail-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.detail-dialog > .dialog-title {
+  padding: 20px 22px 16px;
+  margin: 0;
+  flex: none;
+}
+.detail-dialog .detail-layout {
+  padding: 0 22px 22px;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+.detail-dialog .version-panel {
+  align-self: start;
+  position: sticky;
+  top: 0;
+  max-height: 70dvh;
+  overflow-y: auto;
+}
+.detail-dialog .detail-media img {
+  height: min(49dvh, 500px);
+}
+@media (max-width: 650px) {
+  .composer {
+    padding: 10px 11px 9px;
+  }
+  .composer-inner {
+    max-height: min(250px, 32dvh);
+  }
+  .composer #prompt {
+    height: 60px;
+    font-size: 14px;
+  }
+  .composer-peek {
+    font-size: 12px;
+  }
+  .composer .reference {
+    width: 106px;
+  }
+  .detail-dialog > .dialog-title {
+    padding: 16px;
+  }
+  .detail-dialog .detail-layout {
+    padding: 0 16px 16px;
+  }
+  .detail-dialog .version-panel {
+    position: static;
+    max-height: none;
+  }
+  .composer-dock .hint {
+    gap: 6px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer,
+  .composer-content,
+  .composer-peek {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  * {
+    scrollbar-color: auto;
+  }
+}
+.outpaint-options {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 16px;
+  margin: 12px 0;
+}
+.outpaint-options > input {
+  width: 100%;
+  font-size: 12px;
+  min-width: 0;
+}
+.outpaint-options .picker-button {
+  min-width: 160px;
+  font-size: 12px;
+}
+.outpaint-options > .tiny-note {
+  grid-column: 1/-1;
+  margin: 0;
+}
+.outpaint-options > .inline {
+  white-space: nowrap;
+}
+.editor-dialog {
+  padding: 0;
+  overflow: hidden;
+  max-height: calc(100dvh - 32px);
+}
+.editor-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.editor-dialog > .dialog-title {
+  padding: 20px 24px 14px;
+  margin: 0;
+  flex: none;
+}
+.editor-body {
+  padding: 0 24px;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+.editor-dialog > .dialog-actions {
+  margin: 0;
+  padding: 14px 24px;
+  flex: none;
+  border-top: 1px solid var(--line);
+}
+.editor-dialog .editor-stage,
+.editor-dialog .editor-stage canvas {
+  max-height: 44dvh;
+}
+@media (max-width: 650px) {
+  .outpaint-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .outpaint-options > input {
+    grid-column: 1/-1;
+  }
+  .outpaint-options .inline {
+    justify-content: space-between;
+  }
+}
