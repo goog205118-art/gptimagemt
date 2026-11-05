@@ -25,7 +25,7 @@ function renderRefs() {
           )
           .join(
             '',
-          )}</select><input type="text" data-ref-note="${ref.id}" value="${escapeHTML(ref.note || '')}" placeholder="参考什么 / 保留什么" maxlength="300" aria-label="参考图 ${i + 1} 说明"><div class="ref-order"><span class="ref-name" title="${escapeHTML(ref.name)}">${escapeHTML(ref.name)}</span><div><button type="button" data-move="${ref.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="参考图 ${i + 1} 前移">‹</button><button type="button" data-move="${ref.id}" data-dir="1" ${i === state.refs.length - 1 ? 'disabled' : ''} aria-label="参考图 ${i + 1} 后移">›</button></div></div></div>`,
+          )}</select><input type="text" data-ref-note="${ref.id}" value="${escapeHTML(ref.note || '')}" placeholder="参考什么 / 保留什么" maxlength="300" aria-label="参考图 ${i + 1} 说明"><div class="ref-order"><span class="ref-name" title="${escapeHTML(ref.name)}">${escapeHTML(ref.name)}</span><div><button type="button" data-move="${ref.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="参考图 ${i + 1} 前移">${icon('chevron-left')}</button><button type="button" data-move="${ref.id}" data-dir="1" ${i === state.refs.length - 1 ? 'disabled' : ''} aria-label="参考图 ${i + 1} 后移">${icon('chevron-right')}</button></div></div></div>`,
     )
     .join('');
   for (const ref of $('refs').querySelectorAll('[data-ref]')) {

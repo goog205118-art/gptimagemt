@@ -194,6 +194,8 @@ export function mountPresets() {
     else $('prompt').value = prompt;
     scheduleDraft();
     focusComposer();
+    $('prompt').setSelectionRange(0, 0);
+    $('prompt').scrollTop = 0;
     setStatus('预设已导入，可以继续编辑后生成。');
   });
   $('libraryContent').addEventListener('input', (event) => {

@@ -5,6 +5,8 @@
       <path d="M4 3v4M2 5h4" />
     </symbol>
     <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4V3Z" /></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6" /></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6" /></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
     <symbol id="i-library" viewBox="0 0 24 24">
       <rect x="3" y="3" width="7" height="7" rx="1.5" />

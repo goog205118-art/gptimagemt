@@ -82,35 +82,77 @@ dialog {
 }
 .composer .refs {
   flex-wrap: nowrap;
-  max-height: 138px;
+  align-items: flex-start;
+  max-height: none;
   overflow-x: auto;
   overflow-y: hidden;
   gap: 8px;
-  margin-bottom: 8px;
-  padding: 5px 3px 4px;
+  margin-bottom: 12px;
+  padding: 8px 4px;
 }
 .composer .reference {
+  display: grid;
+  grid-template-rows: 48px 24px 24px 20px;
+  row-gap: 2px;
   flex: none;
   width: 116px;
+  min-width: 0;
+  height: auto;
   padding: 5px;
   border-radius: 10px;
 }
 .composer .reference-main {
   height: 48px;
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 .composer .reference img {
   height: 48px;
 }
 .composer .reference .picker-button {
-  min-height: 23px;
+  min-height: 24px;
+  height: 24px;
+  min-width: 0;
   padding: 3px 5px;
 }
 .composer .reference input {
   height: 24px !important;
 }
 .composer .ref-order {
-  margin-top: 1px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 20px;
+  margin-top: 0;
+}
+.composer .ref-name {
+  min-width: 0;
+  max-width: none;
+  line-height: 18px;
+}
+.composer .ref-order > div {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+.composer .ref-order button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  border-radius: 4px;
+}
+.composer .ref-order svg {
+  width: 12px;
+  height: 12px;
+}
+.composer .ref-order button:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 .composer-peek {
   display: flex;
