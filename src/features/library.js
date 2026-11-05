@@ -1,3 +1,4 @@
+import { presetItemsHTML, openPresetEditor, duplicatePreset, usePreset } from './presets.js';
 import { revealContent } from '../ui/motion.js';
 import { $ } from '../core/dom.js';
 import { existing, state } from '../core/state.js';
@@ -5,7 +6,7 @@ import { escapeHTML, uid } from '../core/utils.js';
 import { runtime } from '../core/runtime.js';
 import { askConfirm, askName, guard, notify, setStatus, showDialog } from '../ui/dialogs.js';
 import { copyRefs, referenceURL } from '../core/assets.js';
-import { focusComposer, readDraft, restoreDraft, scheduleDraft } from './composer.js';
+import { focusComposer, readDraft, scheduleDraft } from './composer.js';
 import { persist } from '../core/storage.js';
 import { MAX_REFS } from '../core/config.js';
 import { renderRefs } from './references.js';
@@ -44,11 +45,7 @@ function renderLibrary() {
     );
   let content = '';
   if (runtime.libraryTab === 'presets')
-    content =
-      '<div class="library-toolbar"><button class="btn outlined" data-lib-action="savePreset">保存当前输入为预设</button></div>' +
-      (state.presets.length
-        ? `<div class="library-list">${state.presets.map((p) => `<article class="library-item" data-lib-id="${p.id}"><div class="item-content"><h3>${escapeHTML(p.name)}</h3><p>${escapeHTML(p.prompt || '未填写画面描述')}</p>${libraryThumbs(p.refs || [])}</div><div class="inline"><button class="btn outlined" data-lib-action="applyPreset">使用</button><button class="btn" data-lib-action="renamePreset">改名</button><button class="btn" data-lib-action="deletePreset">删除</button></div></article>`).join('')}</div>`
-        : '<div class="empty-library">把常用的提示词、参考图、参数和保留要求一起存下来，下次直接套用。</div>');
+    content = `<div class="library-toolbar preset-toolbar"><button class="btn primary" data-lib-action="newPreset">新建预设</button><button class="btn outlined" data-lib-action="savePreset">保存当前输入</button><input type="search" id="presetSearch" value="${escapeHTML(runtime.presetSearch || '')}" placeholder="搜索名称、分类或提示词…" aria-label="搜索提示词预设" /></div><div class="library-list" id="presetItems">${presetItemsHTML(runtime.presetSearch || '')}</div>`;
   if (runtime.libraryTab === 'assets')
     content =
       '<div class="library-toolbar"><button class="btn outlined" data-lib-action="saveAssets">保存当前参考图为素材包</button></div>' +
@@ -82,6 +79,8 @@ async function savePreset() {
   state.presets.unshift({
     id: uid(),
     name,
+    kind: 'snapshot',
+    category: '自定义',
     prompt: d.prompt,
     refs: copyRefs(d.refs),
     settings: {
@@ -179,18 +178,21 @@ function mountFeaturesLibrary() {
     if (!action) return;
     if (action === 'savePreset') await savePreset();
     if (action === 'saveAssets') await saveAssets();
+    if (action === 'newPreset') {
+      openPresetEditor();
+      return;
+    }
+    if (action === 'editPreset') {
+      openPresetEditor(id);
+      return;
+    }
+    if (action === 'duplicatePreset') {
+      await duplicatePreset(id);
+      return;
+    }
     if (action === 'applyPreset') {
-      const p = state.presets.find((p) => p.id === id);
-      if (!p) return;
-      restoreDraft({
-        ...p,
-        projectId: $('draftProject').value,
-        parentId: null,
-        editQueuedId: null,
-      });
-      scheduleDraft();
-      focusComposer();
-      setStatus('预设已导入，可以继续修改。');
+      usePreset(id);
+      return;
     }
     if (action === 'applyAssets') {
       const pack = state.assets.find((p) => p.id === id);
@@ -275,4 +277,4 @@ function mountFeaturesLibrary() {
     if ($('libraryDlg').open) renderLibrary();
   });
 }
-export { libraryThumbs, mountFeaturesLibrary, renderLibrary, renderProjects };
+export { openLibrary, libraryThumbs, mountFeaturesLibrary, renderLibrary, renderProjects };

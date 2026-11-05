@@ -54,7 +54,6 @@
           <svg class="brandmark" aria-hidden="true"><use href="#i-mark" /></svg>
           <div class="brandtext">
             <h1>Autohsu</h1>
-            <span>个人图像工作室</span>
           </div>
         </div>
         <nav class="top-actions" aria-label="工作室工具">
@@ -167,8 +166,7 @@
           </div>
           <div class="welcome" id="welcome">
             <svg class="welcome-mark" aria-hidden="true"><use href="#i-mark" /></svg>
-            <h2>把想法，变成画面。</h2>
-            <p>从一段描述或几张参考图开始。<br />选出喜欢的一张，再慢慢改到满意。</p>
+            <h2>Turn ideas into images.</h2>
             <div class="starters">
               <button data-starter="product">极简产品摄影</button
               ><button data-starter="poster">一张电影海报</button
@@ -245,6 +243,14 @@
                 ><svg class="summary-chevron" viewBox="0 0 16 16" aria-hidden="true">
                   <path d="m4 10 4-4 4 4" />
                 </svg></button
+              ><button
+                type="button"
+                class="icon-btn prompt-preset-trigger"
+                id="promptPresetsBtn"
+                aria-label="提示词预设"
+                title="提示词预设"
+              >
+                <svg aria-hidden="true"><use href="#i-bookmark" /></svg></button
               ><span class="toolbar-spacer"></span>
               <button type="submit" class="send-btn" id="genBtn" aria-label="生成图片" disabled>
                 <span class="send-label" id="sendLabel">生成图片</span
@@ -692,6 +698,130 @@
         ><button class="btn" data-library-tab="usage" aria-pressed="false">用量与备份</button>
       </div>
       <div id="libraryContent"></div>
+    </dialog>
+
+    <dialog id="presetEditorDlg" class="preset-dialog" aria-labelledby="presetEditorTitle">
+      <form id="presetEditorForm">
+        <div class="dialog-title">
+          <h2 id="presetEditorTitle">新建提示词预设</h2>
+          <button
+            type="button"
+            class="icon-btn"
+            data-close="presetEditorDlg"
+            aria-label="关闭预设编辑"
+          >
+            <svg aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <div class="preset-dialog-body">
+          <div class="preset-field-row">
+            <div class="field">
+              <label for="presetName">名称</label
+              ><input
+                type="text"
+                id="presetName"
+                maxlength="80"
+                required
+                placeholder="例如：产品棚拍"
+              />
+            </div>
+            <div class="field">
+              <label for="presetCategory">分类</label
+              ><input
+                type="text"
+                id="presetCategory"
+                maxlength="30"
+                list="presetCategories"
+                placeholder="自定义"
+              /><datalist id="presetCategories">
+                <option value="角色"></option>
+                <option value="分镜"></option>
+                <option value="产品"></option>
+                <option value="光影"></option>
+                <option value="视角"></option>
+                <option value="自定义"></option>
+              </datalist>
+            </div>
+          </div>
+          <div class="field">
+            <label for="presetPrompt">提示词模板</label
+            ><textarea
+              id="presetPrompt"
+              rows="8"
+              maxlength="32000"
+              placeholder="一张 [主体] 的产品照片，背景是 [背景]…"
+            ></textarea
+            ><small>用 [主体] 或 {{主体}} 标记变量，使用预设时再填写。</small>
+          </div>
+          <details id="presetExtras" class="preserve-details">
+            <summary>避免内容与使用说明</summary>
+            <div class="field">
+              <label for="presetNegative">希望避免的内容</label
+              ><textarea
+                id="presetNegative"
+                rows="3"
+                maxlength="8000"
+                placeholder="例如：水印、文字、模糊、主体变形"
+              ></textarea
+              ><small>使用时可选加入，会合并为普通的画面要求。</small>
+            </div>
+            <div class="field">
+              <label for="presetNotes">使用说明</label
+              ><textarea
+                id="presetNotes"
+                rows="2"
+                maxlength="2000"
+                placeholder="例如：适合产品三视图；建议先添加产品参考图"
+              ></textarea>
+            </div>
+          </details>
+          <label class="check"
+            ><input type="checkbox" id="presetSnapshot" /><span
+              >同时保存参考图与生成参数<br /><small
+                >编辑已有完整预设时保留原参考图和参数。</small
+              ></span
+            ></label
+          >
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn" data-close="presetEditorDlg">取消</button
+          ><button type="submit" class="btn primary">保存预设</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="presetUseDlg" class="preset-dialog" aria-labelledby="presetUseTitle">
+      <form id="presetUseForm">
+        <div class="dialog-title">
+          <h2 id="presetUseTitle">使用提示词预设</h2>
+          <button
+            type="button"
+            class="icon-btn"
+            data-close="presetUseDlg"
+            aria-label="关闭预设填写"
+          >
+            <svg aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <div class="preset-dialog-body">
+          <p id="presetUseNote" class="tiny-note"></p>
+          <p id="presetVariableHelp" class="tiny-note">填写以下内容，预览会自动更新。</p>
+          <div id="presetVariables" class="preset-variables"></div>
+          <label class="check" id="presetNegativeCheck"
+            ><input type="checkbox" id="presetIncludeNegative" /><span
+              >加入「希望避免的内容」</span
+            ></label
+          >
+          <div class="field">
+            <label for="presetPreview">导入预览</label
+            ><textarea id="presetPreview" rows="8" readonly></textarea
+            ><small id="presetLength"></small>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn" data-close="presetUseDlg">取消</button
+          ><button type="submit" class="btn primary" id="presetApply">导入编辑</button>
+        </div>
+      </form>
     </dialog>
 
     <dialog id="nameDlg" aria-labelledby="nameTitle">

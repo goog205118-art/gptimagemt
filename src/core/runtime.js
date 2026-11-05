@@ -8,5 +8,6 @@ const runtime = {
   queueCounter: Date.now(),
   detailId: null,
   libraryTab: 'presets',
+  presetSearch: '',
 };
 export { runtime };

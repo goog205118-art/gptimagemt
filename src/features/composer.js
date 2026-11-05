@@ -129,6 +129,7 @@ function updateSend() {
         ? `生成 ${total} 张`
         : '生成图片';
   $('genBtn').setAttribute('aria-label', $('sendLabel').textContent);
+  $('genBtn').title = $('sendLabel').textContent + '（Ctrl / ⌘ + Enter）';
   $('genBtn').disabled = !state.ready || state.adding > 0 || state.submitting;
   const price = priceFor(settingsSnapshot());
   $('estimate').textContent =
@@ -257,7 +258,10 @@ function importTask(t, queueEdit = false) {
     queueEdit ? '编辑后点击更新，替换原排队任务。' : '已恢复原始提示词、参考图、参数与蒙版。',
   );
 }
-let composerBlurTimer;
+let composerBlurTimer,
+  composerPinned = false,
+  composerHovered = false;
+const hoverComposer = () => matchMedia('(hover: hover) and (pointer: fine)').matches;
 function updateComposerPeek() {
   if (!$('composerPeek')) return;
   const text = $('prompt').value.trim();
@@ -281,6 +285,7 @@ function expandComposer(focus = false) {
 }
 function collapseComposer() {
   clearTimeout(composerBlurTimer);
+  composerPinned = false;
   updateComposerPeek();
   $('composer').classList.add('is-collapsed');
   $('composerContent').inert = true;
@@ -299,7 +304,8 @@ function scheduleComposerCollapse() {
   clearTimeout(composerBlurTimer);
   composerBlurTimer = setTimeout(() => {
     if (
-      !composerOwns(document.activeElement) &&
+      !composerPinned &&
+      !composerHovered &&
       !floating.parameterOpen &&
       !(floating.select && composerOwns(floating.trigger))
     )
@@ -343,17 +349,41 @@ function mountFeaturesComposer() {
       }),
   );
   $('addRef').onclick = $('starterReference').onclick = () => $('fileInput').click();
-  $('composerPeek').onclick = () => expandComposer(true);
+  $('composerPeek').onclick = () => {
+    composerPinned = true;
+    expandComposer(true);
+  };
+  $('composer').addEventListener('pointerenter', (event) => {
+    if (event.pointerType !== 'mouse' || !hoverComposer()) return;
+    composerHovered = true;
+    expandComposer();
+  });
+  $('composer').addEventListener('pointerleave', (event) => {
+    if (event.pointerType !== 'mouse' || !hoverComposer()) return;
+    composerHovered = false;
+    if (!composerOwns(event.relatedTarget)) scheduleComposerCollapse();
+  });
   $('composer').addEventListener('input', updateComposerPeek);
   document.addEventListener('focusin', (e) => {
     if (composerOwns(e.target)) {
+      composerPinned = true;
       clearTimeout(composerBlurTimer);
       if ($('composerContent').contains(e.target)) expandComposer();
-    } else scheduleComposerCollapse();
+    } else {
+      composerPinned = false;
+      scheduleComposerCollapse();
+    }
   });
   $('composer').addEventListener('focusout', scheduleComposerCollapse);
   document.addEventListener('pointerdown', (e) => {
-    if (!composerOwns(e.target)) scheduleComposerCollapse();
+    if (composerOwns(e.target)) {
+      composerPinned = true;
+      expandComposer();
+    } else {
+      composerPinned = false;
+      composerHovered = false;
+      scheduleComposerCollapse();
+    }
   });
   new ResizeObserver(() => positionFloatingPanels()).observe($('composer'));
   collapseComposer();

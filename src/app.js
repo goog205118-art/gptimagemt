@@ -1,3 +1,4 @@
+import { seedPromptPresets } from './features/presets.js';
 import { active, state, taskById } from './core/state.js';
 import { imageURL, referenceURL } from './core/assets.js';
 import { fileName } from './features/transfers.js';
@@ -100,6 +101,7 @@ async function init() {
     ...state.tasks.map((t) => t.queueOrder || 0),
   );
   for (const log of state.ledger) if (log.status === 'running') log.status = 'unknown';
+  seedPromptPresets();
   initializeModelControls();
   initializeAccountControls();
   $('concurrency').value = state.prefs.concurrency || 3;

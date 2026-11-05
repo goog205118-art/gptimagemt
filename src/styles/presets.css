@@ -1,0 +1,165 @@
+/* Compact creation controls and a reusable, editable prompt library. */
+#genBtn {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 10px;
+  border-radius: 50%;
+}
+#sendLabel {
+  display: none;
+}
+.prompt-preset-trigger {
+  flex: none;
+  color: var(--muted);
+}
+.prompt-preset-trigger:hover {
+  color: var(--ink);
+}
+.welcome h2 {
+  font-size: clamp(22px, 2.2vw, 28px);
+  letter-spacing: -0.025em;
+}
+.preset-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.preset-toolbar > input {
+  flex: 1;
+  min-width: 140px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 9px 12px;
+  font-size: 12px;
+}
+.preset-item {
+  align-items: start;
+}
+.preset-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 6px;
+}
+.preset-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
+  flex: none;
+}
+.preset-item-actions .btn {
+  font-size: 12px;
+  padding-inline: 9px;
+}
+.preset-dialog {
+  width: min(720px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  overflow: hidden;
+}
+.preset-dialog > form {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+}
+.preset-dialog .dialog-title {
+  padding: 18px 20px 12px;
+  margin: 0;
+  gap: 12px;
+  flex: none;
+}
+.preset-dialog .dialog-title h2 {
+  font-size: 16px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.preset-dialog-body {
+  padding: 0 20px;
+  overflow-y: auto;
+  min-height: 0;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.preset-dialog .dialog-actions {
+  margin: 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
+  flex: none;
+}
+.preset-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 14px;
+}
+.preset-field-row .field,
+.preset-variables .field {
+  min-width: 0;
+}
+.preset-dialog input[type='text'] {
+  width: 100%;
+}
+.preset-dialog textarea {
+  max-height: 34dvh;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.preset-dialog .field > small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.6;
+  margin-top: 6px;
+}
+.preset-dialog .preserve-details {
+  margin-bottom: 18px;
+}
+.preset-dialog .preserve-details > summary {
+  margin-bottom: 12px;
+}
+.preset-dialog .check {
+  margin-bottom: 18px;
+  align-items: start;
+}
+.preset-variables {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+}
+#presetPreview {
+  min-height: 140px;
+  background: var(--soft);
+}
+#presetLength.error {
+  color: var(--danger);
+}
+@media (max-width: 650px) {
+  .preset-toolbar > input {
+    flex-basis: 100%;
+  }
+  .preset-item {
+    gap: 10px;
+  }
+  .preset-item-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .preset-field-row,
+  .preset-variables {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .preset-dialog .dialog-title {
+    padding: 16px 16px 10px;
+  }
+  .preset-dialog-body {
+    padding-inline: 16px;
+  }
+  .preset-dialog .dialog-actions {
+    padding: 12px 16px;
+  }
+}
