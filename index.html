@@ -58,6 +58,18 @@
           </div>
         </div>
         <nav class="top-actions" aria-label="工作室工具">
+          <button
+            type="button"
+            class="connection-drop-zone"
+            id="connectionDropZone"
+            data-state="idle"
+            aria-label="点击或拖入 JSON 连接配置，自动保存并刷新"
+            aria-busy="false"
+            title="拖入本工具导出的 JSON，保存密钥、模型和价格，并刷新模型与余额"
+          >
+            <svg aria-hidden="true"><use href="#i-download" /></svg
+            ><span id="connectionDropLabel" aria-live="polite">导入配置</span><small>JSON</small>
+          </button>
           <button class="btn quota-trigger" id="quotaBtn" aria-label="查看账户余额">
             <svg aria-hidden="true"><use href="#i-wallet" /></svg>
             <span id="quotaButtonLabel">余额</span>
@@ -558,12 +570,12 @@
       accept="image/png,image/jpeg,image/webp"
       multiple
       hidden
-    /><input
+    /><input type="file" id="connectionFileInput" accept=".json,application/json" hidden /><input
       type="file"
-      id="connectionFileInput"
-      accept=".json,.openlux,application/json"
+      id="backupInput"
+      accept="application/json,.json"
       hidden
-    /><input type="file" id="backupInput" accept="application/json,.json" hidden />
+    />
     <div class="drop-overlay" id="dropOverlay" hidden>
       <svg aria-hidden="true"><use href="#i-image" /></svg><span>松手，导入图片或连接配置</span
       ><small>PNG、JPG、WebP · 连接配置 JSON</small>
@@ -603,7 +615,10 @@
           >
           <section class="connection-transfer" aria-labelledby="connectionTransferTitle">
             <h3 id="connectionTransferTitle">跨设备连接</h3>
-            <p class="tiny-note">导出 API Key、账户令牌与用户 ID，换电脑后拖入文件即可保存。</p>
+            <p class="tiny-note">
+              导出 API Key、账户令牌、用户 ID、模型、生成参数与价格，换电脑后拖入 JSON
+              即可保存并刷新。
+            </p>
             <div class="connection-transfer-actions">
               <button type="button" class="btn outlined" id="exportConnection">导出连接文件</button
               ><button type="button" class="btn" id="exportEncryptedConnection">加密导出</button

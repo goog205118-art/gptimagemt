@@ -359,6 +359,7 @@ function mountFeaturesComposer() {
   collapseComposer();
 }
 export {
+  applySettings,
   captureDraft,
   collapseAdvanced,
   continueTask,

@@ -195,7 +195,7 @@ function validateGptTask(t) {
     throw new Error('透明背景请使用 PNG 或 WebP。');
   return p;
 }
-function initializeModelControls() {
+function rebuildModelControls() {
   const saved = state.prefs.gptCatalog;
   if (saved?.ids?.length) setGptModelInventory(saved.ids, saved.base, saved.checkedAt);
   else {
@@ -212,6 +212,10 @@ function initializeModelControls() {
   for (const size of ['2048x2048', '2048x1152', '3840x2160'])
     if (!Array.from($('size').options).some((o) => o.value === size))
       $('size').add(new Option(size, size));
+  applyGptProfile(true);
+}
+function initializeModelControls() {
+  rebuildModelControls();
   $('model').addEventListener('change', () => {
     applyGptProfile(true);
     const p = gptProfile($('model').value),
@@ -229,6 +233,7 @@ export {
   gptModelLabel,
   gptProfile,
   initializeModelControls,
+  rebuildModelControls,
   isGptImageModel,
   isOpenLuxBase,
   setGptModelInventory,

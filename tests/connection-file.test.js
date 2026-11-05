@@ -125,3 +125,53 @@ test('failed browser storage writes roll back every connection field', () => {
   assert.throws(() => saveImportedConnection(connection, storage), /原有连接已保留/);
   assert.deepEqual(storage.values, before);
 });
+
+test('portable configuration carries validated model, prices and generation settings in plain and encrypted files', async () => {
+  const preferences = {
+    customModels: ['gpt-image-2', 'gpt-image-2.5-flare'],
+    currency: 'USD',
+    prices: { 'gpt-image-2': 0.2, 'gpt-image-2.5-flare': 0.35 },
+    generation: {
+      model: 'gpt-image-2.5-flare',
+      size: '1536x1024',
+      quality: 'xhigh',
+      n: 2,
+      format: 'webp',
+      background: 'auto',
+      timeout: 600,
+      compression: 85,
+      route: '',
+    },
+  };
+  for (const password of ['', 'portable-test-password']) {
+    const file = await encodeConnectionFile({ ...connection, preferences }, password);
+    assert.deepEqual(await decodeConnectionFile(file, password), { ...connection, preferences });
+  }
+  const normalized = normalizeConnection({
+    ...connection,
+    preferences: {
+      ...preferences,
+      history: ['omit'],
+      queuePaused: false,
+      generation: { ...preferences.generation, base: 'https://untrusted.example' },
+    },
+  });
+  assert.deepEqual(normalized.preferences, preferences);
+});
+
+test('invalid prices and model settings fail before any credential writes', () => {
+  const invalid = [
+    { customModels: ['unrelated-chat-model'] },
+    { currency: 'OTHER' },
+    { prices: { 'gpt-image-2': -0.1 } },
+    { prices: { 'gpt-image-2': '0.2' } },
+    { generation: { n: 100 } },
+    { generation: { quality: 'unsupported' } },
+  ];
+  for (const preferences of invalid) {
+    const storage = new MemoryStorage({ openlux_key: 'original-key' });
+    assert.throws(() => saveImportedConnection({ ...connection, preferences }, storage));
+    assert.equal(storage.getItem('openlux_key'), 'original-key');
+    assert.equal(storage.getItem('openlux_base'), null);
+  }
+});

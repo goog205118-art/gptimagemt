@@ -86,8 +86,9 @@ function refreshSavedAccountBalance() {
     /^\d+$/.test($('accountUserId').value.trim())
   ) {
     quotaState.mode = 'account';
-    refreshQuota();
+    return refreshQuota();
   }
+  return Promise.resolve(null);
 }
 function quotaCredentialMap() {
   try {
@@ -272,6 +273,7 @@ async function refreshQuota() {
       cacheAccountBalance();
     }
     renderQuota();
+    return true;
   } catch (e) {
     if (serial === quotaState.serial) {
       if (account) quotaState.accountStatus = 'error';
@@ -282,6 +284,7 @@ async function refreshQuota() {
             ? '额度接口暂时无法连接，请检查网络后刷新。'
             : e.message;
     }
+    return false;
   } finally {
     if (serial === quotaState.serial) {
       quotaState.busy = false;

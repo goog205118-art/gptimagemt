@@ -1,3 +1,5 @@
+import { isGptImageModel } from '../../shared/model-ids.js';
+
 export const CONNECTION_FORMAT = 'openlux-connection';
 export const MAX_CONNECTION_FILE_BYTES = 96 * 1024;
 const ITERATIONS = 310000;
@@ -15,6 +17,80 @@ function secret(value, label) {
   const normalized = value.trim().replace(/^Bearer\s+/i, '');
   if (/\s/.test(normalized)) throw new Error(`${label}不能包含空格或换行。`);
   return normalized;
+}
+
+function modelId(value) {
+  return typeof value === 'string' && value.length <= 150 && isGptImageModel(value);
+}
+
+function normalizePreferences(value) {
+  if (!record(value)) throw new Error('模型与价格配置无效。');
+  const result = {};
+  if (Object.hasOwn(value, 'customModels')) {
+    if (
+      !Array.isArray(value.customModels) ||
+      value.customModels.length > 128 ||
+      !value.customModels.every(modelId)
+    ) {
+      throw new Error('模型列表只支持 GPT 生图模型，最多 128 项。');
+    }
+    result.customModels = [...new Set(value.customModels)];
+  }
+  if (Object.hasOwn(value, 'currency')) {
+    if (!['CNY', 'USD'].includes(value.currency)) throw new Error('价格币种只支持 CNY 或 USD。');
+    result.currency = value.currency;
+  }
+  if (Object.hasOwn(value, 'prices')) {
+    if (!record(value.prices) || Object.keys(value.prices).length > 256)
+      throw new Error('模型价格配置无效。');
+    result.prices = {};
+    for (const [id, price] of Object.entries(value.prices)) {
+      if (!modelId(id) || typeof price !== 'number' || !Number.isFinite(price) || price < 0) {
+        throw new Error('价格须使用 GPT 生图模型 ID 和非负数字。');
+      }
+      result.prices[id] = price;
+    }
+  }
+  if (Object.hasOwn(value, 'generation')) {
+    if (!record(value.generation)) throw new Error('生成参数配置无效。');
+    const generation = {},
+      source = value.generation;
+    if (Object.hasOwn(source, 'model')) {
+      if (!modelId(source.model)) throw new Error('生成模型须为 GPT 生图模型。');
+      generation.model = source.model;
+    }
+    const enums = {
+      route: ['', '-fast', '-intx', '-stable'],
+      quality: ['low', 'medium', 'high', 'xhigh', 'max', 'auto'],
+      format: ['png', 'jpeg', 'webp'],
+      background: ['auto', 'opaque', 'transparent'],
+    };
+    for (const [key, options] of Object.entries(enums))
+      if (Object.hasOwn(source, key)) {
+        if (!options.includes(source[key])) throw new Error('生成参数配置无效。');
+        generation[key] = source[key];
+      }
+    if (Object.hasOwn(source, 'size')) {
+      if (
+        typeof source.size !== 'string' ||
+        (source.size !== 'auto' && !/^\d{3,5}x\d{3,5}$/.test(source.size))
+      )
+        throw new Error('图片尺寸配置无效。');
+      generation.size = source.size;
+    }
+    for (const [key, min, max] of [
+      ['timeout', 30, 1800],
+      ['compression', 0, 100],
+      ['n', 1, 4],
+    ])
+      if (Object.hasOwn(source, key)) {
+        if (!Number.isInteger(source[key]) || source[key] < min || source[key] > max)
+          throw new Error('生成参数数值超出允许范围。');
+        generation[key] = source[key];
+      }
+    result.generation = generation;
+  }
+  return result;
 }
 
 export function normalizeConnection(value) {
@@ -50,6 +126,8 @@ export function normalizeConnection(value) {
     result.account = { token, userId };
   }
   if (!result.apiKey && !result.account?.token) throw new Error('连接文件中至少需要一个密钥。');
+  if (Object.hasOwn(value, 'preferences'))
+    result.preferences = normalizePreferences(value.preferences);
   return result;
 }
 

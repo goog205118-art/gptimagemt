@@ -1,4 +1,5 @@
 import { postQuery } from './http.js';
+import { parsePriceRules, formatPriceRules } from './pricing.js';
 import { isOpenLuxBase } from './models.js';
 import { $ } from '../core/dom.js';
 import { state } from '../core/state.js';
@@ -21,9 +22,7 @@ function showSettings() {
   $('keyInput').type = 'password';
   $('showKey').textContent = '显示';
   $('priceCurrency').value = state.prefs.currency;
-  $('priceRules').value = Object.entries(state.prefs.prices || {})
-    .map(([k, v]) => `${k} = ${v}`)
-    .join('\n');
+  $('priceRules').value = formatPriceRules(state.prefs.prices);
   $('autoRateRetry').checked = state.prefs.autoRateRetry;
   showDialog('keyDlg');
 }
@@ -42,6 +41,24 @@ function addModel(model) {
   if (!state.prefs.customModels.includes(model)) state.prefs.customModels.push(model);
   applyGptProfile(true);
 }
+async function fetchGptModelCatalog(base, key) {
+  let data;
+  if (isOpenLuxBase(base)) data = await postQuery('/api/models', new URL(base).origin, key);
+  else {
+    const response = await fetch(base + '/models', {
+      headers: { Authorization: 'Bearer ' + key },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!response.ok) throw new Error('读取模型失败：HTTP ' + response.status);
+    data = await response.json();
+  }
+  if (!Array.isArray(data.data)) throw new Error('模型接口没有返回有效的模型列表。');
+  const ids = data.data.map((item) => item.id).filter((id) => typeof id === 'string');
+  return {
+    ids,
+    filteredCount: data.filtered_count ?? ids.filter((id) => !isGptImageModel(id)).length,
+  };
+}
 function mountServicesConnection() {
   $('keyBtn').onclick = showSettings;
   $('showKey').onclick = () => {
@@ -52,15 +69,7 @@ function mountServicesConnection() {
   $('settingsForm').onsubmit = guard(async (e) => {
     e.preventDefault();
     const base = parseBase($('baseInput').value),
-      prices = {};
-    for (const line of $('priceRules')
-      .value.split(/\r?\n/)
-      .map((x) => x.trim())
-      .filter(Boolean)) {
-      const match = line.match(/^([^=]+)=\s*(\d+(?:\.\d+)?)$/);
-      if (!match) throw new Error('价格格式应为：模型含路由 = 每张价格');
-      prices[match[1].trim()] = Number(match[2]);
-    }
+      prices = parsePriceRules($('priceRules').value);
     state.base = base;
     state.key = $('keyInput').value.trim();
     if (!storageSet('openlux_key', $('rememberKey').checked && state.key ? state.key : null))
@@ -89,23 +98,12 @@ function mountServicesConnection() {
     $('modelsStatus').textContent = '正在读取…';
     $('fetchModels').disabled = true;
     try {
-      let data;
-      if (isOpenLuxBase(base)) data = await postQuery('/api/models', new URL(base).origin, key);
-      else {
-        const response = await fetch(base + '/models', {
-          headers: {
-            Authorization: 'Bearer ' + key,
-          },
-          signal: AbortSignal.timeout(30000),
-        });
-        if (!response.ok) throw new Error('读取模型失败：HTTP ' + response.status);
-        data = await response.json();
-      }
-      const ids = (data.data || []).map((item) => item.id).filter((id) => typeof id === 'string');
+      const { ids, filteredCount } = await fetchGptModelCatalog(base, key);
+      if ($('keyInput').value.trim() !== key || parseBase($('baseInput').value) !== base) return;
       const models = setGptModelInventory(ids, base);
       await persist();
       $('modelsStatus').textContent =
-        `已读取 ${models.length} 个 GPT 生图模型，过滤 ${data.filtered_count ?? ids.length - models.length} 个其他模型`;
+        `已读取 ${models.length} 个 GPT 生图模型，过滤 ${filteredCount} 个其他模型`;
     } catch (e) {
       $('modelsStatus').textContent = '读取失败';
       throw e;
@@ -114,4 +112,4 @@ function mountServicesConnection() {
     }
   });
 }
-export { keyIndicator, mountServicesConnection, parseBase, showSettings };
+export { fetchGptModelCatalog, keyIndicator, mountServicesConnection, parseBase, showSettings };

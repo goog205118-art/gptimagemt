@@ -53,6 +53,52 @@ main {
   gap: 4px;
   max-width: none;
 }
+.connection-drop-zone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+  min-width: 120px;
+  height: 32px;
+  padding: 5px 9px;
+  margin-right: 4px;
+  border: 1px dashed #c7c7c7;
+  border-radius: 9px;
+  background: var(--surface);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.connection-drop-zone > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+}
+.connection-drop-zone > small {
+  font-size: 9px;
+  line-height: 1;
+  color: var(--muted);
+}
+.connection-drop-zone:hover,
+.connection-drop-zone.is-dragover {
+  background: #ededed;
+  border-color: var(--ink);
+}
+.connection-drop-zone.is-dragover {
+  border-style: solid;
+}
+.connection-drop-zone[data-state='loading'] {
+  background: var(--soft);
+}
+.connection-drop-zone[data-state='success'] {
+  border-color: var(--success);
+}
+.connection-drop-zone[data-state='warning'] {
+  border-style: solid;
+}
+.connection-drop-zone[data-state='error'] {
+  border-color: var(--danger);
+}
 .top-actions .quota-trigger {
   max-width: 160px;
   min-height: 34px;
@@ -547,6 +593,14 @@ dialog[open]::backdrop {
   }
 }
 @media (max-width: 650px) {
+  .connection-drop-zone {
+    min-width: 62px;
+    padding-inline: 6px;
+    margin-right: 0;
+  }
+  .connection-drop-zone > span {
+    display: none;
+  }
   .topbar {
     padding-block: 0;
   }
@@ -618,7 +672,7 @@ dialog[open]::backdrop {
     flex-wrap: wrap;
   }
 }
-@media (max-width: 480px) {
+@media (max-width: 600px) {
   .topbar {
     flex-wrap: wrap;
     gap: 4px;
@@ -644,7 +698,7 @@ dialog[open]::backdrop {
     margin-left: 0;
   }
   .top-actions .quota-trigger {
-    max-width: 150px;
+    max-width: 100px;
     padding-left: 2px;
   }
   .gallery-title {
