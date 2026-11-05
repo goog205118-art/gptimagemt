@@ -81,7 +81,7 @@ async function init() {
   }
   if (Array.isArray(saved)) state.tasks = saved;
   else if (saved?.version) {
-    for (const key of ['tasks', 'projects', 'presets', 'assets', 'ledger'])
+    for (const key of ['tasks', 'projects', 'presets', 'assets', 'ledger', 'agentRuns'])
       if (Array.isArray(saved[key])) state[key] = saved[key];
     state.prefs = {
       ...state.prefs,
@@ -101,6 +101,23 @@ async function init() {
     ...state.tasks.map((t) => t.queueOrder || 0),
   );
   for (const log of state.ledger) if (log.status === 'running') log.status = 'unknown';
+  for (const run of state.agentRuns) {
+    if (run.status === 'planning') {
+      run.status = 'failed';
+      run.error = '页面关闭或刷新后停止了规划。确认服务商文本用量后，可手动重试。';
+    }
+    if (run.status === 'running') {
+      run.status = 'unknown';
+      run.stopped = true;
+      run.error = '页面已刷新，执行暂停。请核实已有请求，不会自动恢复 Agent。';
+      for (const task of state.tasks.filter((t) => t.agentRunId === run.id)) {
+        if (['queued', 'retry_wait'].includes(task.status)) {
+          task.status = 'cancelled';
+          task.error = 'Agent 会话已中断，未自动重新提交。';
+        }
+      }
+    }
+  }
   seedPromptPresets();
   initializeModelControls();
   initializeAccountControls();
@@ -149,7 +166,7 @@ function mountApp() {
       captureDraft();
       persist();
     }
-    if (state.tasks.some(active)) {
+    if (state.tasks.some(active) || state.agentRuns.some((run) => run.status === 'planning')) {
       e.preventDefault();
       e.returnValue = '';
     }

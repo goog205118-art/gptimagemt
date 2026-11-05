@@ -173,6 +173,7 @@
               ><button id="starterReference">从参考图开始</button>
             </div>
           </div>
+          <div id="agentRuns" class="agent-runs" aria-label="Agent 创作方案" hidden></div>
           <div id="gallery" class="gallery" aria-label="图片与生成任务"></div>
           <button class="btn outlined load-more" id="loadMore" hidden>显示更多作品</button>
         </section>
@@ -216,6 +217,25 @@
               ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 10 4-4 4 4" /></svg>
             </button>
             <div class="composer-toolbar">
+              <button
+                type="button"
+                class="agent-toggle"
+                id="agentModeBtn"
+                aria-pressed="false"
+                title="切换 Agent 模式"
+              >
+                Agent
+              </button>
+              <button
+                type="button"
+                class="icon-btn"
+                id="agentSettingsBtn"
+                aria-label="Agent 设置"
+                title="Agent 设置"
+                hidden
+              >
+                <svg aria-hidden="true"><use href="#i-settings" /></svg>
+              </button>
               <button
                 class="icon-btn attachment"
                 type="button"
@@ -1122,6 +1142,150 @@
         <div class="dialog-actions">
           <button type="button" class="btn" data-close="connectionFileDlg">取消</button
           ><button type="submit" class="btn primary" id="connectionFileSubmit">加密导出</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog
+      id="agentSettingsDlg"
+      class="preset-dialog agent-dialog"
+      aria-labelledby="agentSettingsTitle"
+    >
+      <form id="agentSettingsForm">
+        <div class="dialog-title">
+          <h2 id="agentSettingsTitle">Agent 设置</h2>
+          <button type="button" class="icon-btn" data-close="agentSettingsDlg" aria-label="关闭">
+            <svg aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <div class="preset-dialog-body">
+          <p class="agent-help">
+            由 OpenLux 规划需求，GPT Image
+            执行生图。先确认方案，再生成；参考图会以压缩预览发送给规划模型。
+          </p>
+          <label class="check"
+            ><input id="agentReuseKey" type="checkbox" checked /><span
+              >复用当前 OpenLux 生图连接与 Key</span
+            ></label
+          >
+          <div id="agentSeparateConnection" hidden>
+            <div class="field">
+              <label for="agentBase">OpenLux API 地址</label
+              ><input id="agentBase" type="url" placeholder="https://api.openlux.ai/v1" />
+            </div>
+            <div class="field">
+              <label for="agentKey">Agent API Key</label
+              ><input id="agentKey" type="password" autocomplete="off" spellcheck="false" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="agentModel">规划模型 ID</label
+            ><input id="agentModel" type="text" required spellcheck="false" value="gpt-6.1-sol" />
+          </div>
+          <div class="field">
+            <label for="agentStrict">结构化输出</label
+            ><select id="agentStrict">
+              <option value="strict">严格结构化（推荐）</option>
+              <option value="json">JSON 兼容模式</option></select
+            ><small>若渠道不接受严格结构化，可手动切换。不会自动重发付费规划请求。</small>
+          </div>
+          <label class="check"
+            ><input id="agentRemember" type="checkbox" checked /><span
+              >在当前浏览器记住 Agent 连接</span
+            ></label
+          >
+          <div class="preset-field-row">
+            <div class="field">
+              <label for="agentMaxRequests">每个方案最多生图请求数</label
+              ><input id="agentMaxRequests" type="number" min="1" max="3" value="3" required />
+            </div>
+            <div class="field">
+              <label for="agentCostLimit" id="agentCostLabel">每个方案估算费用上限</label
+              ><input
+                id="agentCostLimit"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="留空则仅手动确认首次生成"
+              />
+            </div>
+          </div>
+          <p class="agent-help">
+            自动重试需要已填写的模型单价和费用上限。这里只限制估算值，实际费用以 OpenLux
+            账单为准；规划的文本用量另计。
+          </p>
+          <details class="preserve-details">
+            <summary>允许自动切换的备用模型 / 线路</summary>
+            <p class="agent-help">
+              只会使用你勾选且与本次参数兼容的候选。未勾选时只使用方案中的模型。
+            </p>
+            <div id="agentCandidates" class="agent-candidates"></div>
+          </details>
+          <label class="check"
+            ><input id="agentAutomatic" type="checkbox" /><span
+              >首次确认后，后续方案在已设估算上限内自动执行</span
+            ></label
+          >
+          <p id="agentConnectionStatus" class="agent-feedback" role="status"></p>
+          <div class="agent-test-actions">
+            <button type="button" class="btn outlined" id="agentCheckModel">
+              检查模型可见性（不生图）</button
+            ><button type="button" class="btn" id="agentTestPlan">测试规划（产生文本用量）</button>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button type="submit" class="btn primary">保存设置</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="agentPlanDlg" class="preset-dialog agent-dialog" aria-labelledby="agentPlanTitle">
+      <form id="agentPlanForm">
+        <div class="dialog-title">
+          <h2 id="agentPlanTitle">创作方案</h2>
+          <button type="button" class="icon-btn" data-close="agentPlanDlg" aria-label="关闭">
+            <svg aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <div class="preset-dialog-body">
+          <p id="agentPlanSummary" class="agent-help"></p>
+          <div id="agentQuestions" class="agent-questions"></div>
+          <div id="agentPlanFields">
+            <div class="field">
+              <label for="agentPlanPrompt">提示词</label
+              ><textarea id="agentPlanPrompt" rows="4" maxlength="32000"></textarea>
+            </div>
+            <div class="field">
+              <label for="agentPlanConstraints">需要保留的内容</label
+              ><textarea id="agentPlanConstraints" rows="2" maxlength="4000"></textarea>
+            </div>
+            <div class="preset-field-row">
+              <div class="field">
+                <label for="agentPlanModel">生图模型 / 线路</label
+                ><select id="agentPlanModel"></select>
+              </div>
+              <div class="field">
+                <label for="agentPlanSize">尺寸</label
+                ><select id="agentPlanSize"></select>
+              </div>
+            </div>
+            <div class="preset-field-row">
+              <div class="field">
+                <label for="agentPlanQuality">质量</label
+                ><select id="agentPlanQuality"></select>
+              </div>
+              <div class="field">
+                <label for="agentPlanCount">张数</label
+                ><input id="agentPlanCount" type="number" min="1" max="3" />
+              </div>
+            </div>
+            <p id="agentPlanReferences" class="agent-help"></p>
+            <p id="agentPlanEstimate" class="agent-help"></p>
+            <p id="agentPlanFallbacks" class="agent-help"></p>
+          </div>
+          <p id="agentPlanError" class="agent-feedback error" role="alert"></p>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="agentImportPlan">转到输入框编辑</button
+          ><button type="submit" class="btn primary" id="agentExecute">确认并生成</button>
         </div>
       </form>
     </dialog>

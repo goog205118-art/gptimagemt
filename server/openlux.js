@@ -13,7 +13,7 @@ export function sendJSON(response, status, payload) {
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.end(JSON.stringify(payload));
 }
-export async function readRequest(request) {
+export async function readRequest(request, maxBodyBytes = MAX_BODY_BYTES) {
   if (request.method !== 'POST') throw new RequestError(405, '请使用 POST 查询。');
   const origin = request.headers.origin;
   if (request.headers['sec-fetch-site'] === 'cross-site') {
@@ -43,13 +43,13 @@ export async function readRequest(request) {
     for await (const chunk of request) {
       const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       length += bytes.length;
-      if (length > MAX_BODY_BYTES) throw new RequestError(413, '查询信息过大。');
+      if (length > maxBodyBytes) throw new RequestError(413, '查询信息过大。');
       chunks.push(bytes);
     }
     raw = Buffer.concat(chunks).toString('utf8');
   }
   if (Buffer.isBuffer(raw)) raw = raw.toString('utf8');
-  if (typeof raw === 'string' && Buffer.byteLength(raw) > MAX_BODY_BYTES) {
+  if (typeof raw === 'string' && Buffer.byteLength(raw) > maxBodyBytes) {
     throw new RequestError(413, '查询信息过大。');
   }
   let body;
@@ -61,7 +61,7 @@ export async function readRequest(request) {
   if (!body || Array.isArray(body) || typeof body !== 'object') {
     throw new RequestError(400, '查询信息不完整。');
   }
-  if (Buffer.byteLength(JSON.stringify(body)) > MAX_BODY_BYTES) {
+  if (Buffer.byteLength(JSON.stringify(body)) > maxBodyBytes) {
     throw new RequestError(413, '查询信息过大。');
   }
   if (!ALLOWED_ORIGINS.has(body.origin)) {

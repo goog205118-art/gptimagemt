@@ -10,6 +10,8 @@ const state = {
   presets: [],
   assets: [],
   ledger: [],
+  agentRuns: [],
+  agentMode: false,
   prefs: {
     concurrency: 3,
     autoRateRetry: true,

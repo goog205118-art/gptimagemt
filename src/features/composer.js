@@ -128,6 +128,7 @@ function updateSend() {
       : total > 1
         ? `生成 ${total} 张`
         : '生成图片';
+  if (state.agentMode) $('sendLabel').textContent = 'Agent 规划需求';
   $('genBtn').setAttribute('aria-label', $('sendLabel').textContent);
   $('genBtn').title = $('sendLabel').textContent + '（Ctrl / ⌘ + Enter）';
   $('genBtn').disabled = !state.ready || state.adding > 0 || state.submitting;

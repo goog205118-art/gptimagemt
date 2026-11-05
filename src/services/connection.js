@@ -70,6 +70,10 @@ function mountServicesConnection() {
     e.preventDefault();
     const base = parseBase($('baseInput').value),
       prices = parsePriceRules($('priceRules').value);
+    if (base !== state.base || $('keyInput').value.trim() !== state.key) {
+      state.prefs.agentConfirmed = false;
+      state.prefs.gptCatalog = null;
+    }
     state.base = base;
     state.key = $('keyInput').value.trim();
     if (!storageSet('openlux_key', $('rememberKey').checked && state.key ? state.key : null))

@@ -347,10 +347,26 @@ function mountFeaturesTransfers() {
     )
       return;
     const restored = await decodeBackup(raw);
+    restored.agentRuns = Array.isArray(restored.agentRuns) ? restored.agentRuns : [];
     const validId = (id) => typeof id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(id);
     for (const key of ['tasks', 'projects', 'presets', 'assets', 'ledger'])
       for (const item of restored[key])
         if (!item || !validId(item.id)) throw new Error('备份包含无效记录 ID。');
+    for (const run of restored.agentRuns) {
+      if (
+        !validId(run?.id) ||
+        typeof run.request !== 'string' ||
+        !run.snapshot ||
+        !Array.isArray(run.snapshot.refs)
+      )
+        throw new Error('备份中的 Agent 方案无效。');
+      for (const ref of run.snapshot.refs)
+        if (!validId(ref.id) || !(ref.blob instanceof Blob))
+          throw new Error('Agent 参考素材无效。');
+      run.stopped = true;
+      run.status = 'cancelled';
+      run.error = '从备份恢复的 Agent 方案仅供查看和导入，不会自动执行。';
+    }
     for (const t of restored.tasks) {
       if (
         typeof t.prompt !== 'string' ||
@@ -375,7 +391,7 @@ function mountFeaturesTransfers() {
           if (!validId(r.id) || !(r.blob instanceof Blob)) throw new Error('备份素材图片无效。');
       }
     let added = 0;
-    for (const key of ['projects', 'tasks', 'presets', 'assets', 'ledger']) {
+    for (const key of ['projects', 'tasks', 'presets', 'assets', 'ledger', 'agentRuns']) {
       const ids = new Set(state[key].map((x) => x.id));
       for (const item of restored[key])
         if (!ids.has(item.id)) {

@@ -23,6 +23,7 @@ import { applySettings, captureDraft, settingsSnapshot, updateSend } from './com
 import { render } from './gallery.js';
 import { saveBlob } from './transfers.js';
 import { guard, notify, setStatus, showDialog } from '../ui/dialogs.js';
+import { getAgentConnection, setAgentConnection } from '../services/agent.js';
 
 let pending = null,
   operation = 0,
@@ -52,6 +53,7 @@ function currentConnection() {
       generation: { ...settingsSnapshot(), n: Number($('n').value) },
     },
     ...(apiKey ? { apiKey } : {}),
+    agent: getAgentConnection(),
     ...(account?.token ? { account: { token: account.token, userId: account.userId || '' } } : {}),
   });
 }
@@ -132,6 +134,8 @@ async function applyConnection(connection) {
   importFeedback('loading', '保存中…');
   state.base = saved.base;
   state.key = saved.apiKey;
+  state.prefs.agentConfirmed = false;
+  if (saved.agent) setAgentConnection(saved.agent);
   // Importing credentials must never start old paid jobs with a new connection.
   if (state.tasks.some(active)) state.queuePaused = true;
   // Available models must be rechecked for the imported key, even on the same host.

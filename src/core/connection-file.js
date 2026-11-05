@@ -125,7 +125,25 @@ export function normalizeConnection(value) {
     }
     result.account = { token, userId };
   }
-  if (!result.apiKey && !result.account?.token) throw new Error('连接文件中至少需要一个密钥。');
+  if (Object.hasOwn(value, 'agent')) {
+    const agent = value.agent;
+    if (!record(agent) || !/^gpt-[a-zA-Z0-9._-]{1,120}$/.test(agent.model))
+      throw new Error('Agent 连接配置无效。');
+    const base = agent.base || 'https://api.openlux.ai/v1';
+    if (!['https://api.openlux.ai/v1', 'https://api.openlux.uk/v1'].includes(base))
+      throw new Error('Agent 仅支持 OpenLux 官方地址。');
+    result.agent = {
+      base,
+      model: agent.model,
+      useImageKey: agent.useImageKey !== false,
+      strict: agent.strict !== false,
+      apiKey: secret(agent.apiKey || '', 'Agent Key'),
+    };
+    if (result.agent.useImageKey) result.agent.apiKey = '';
+    else if (!result.agent.apiKey) throw new Error('缺少独立 Agent Key。');
+  }
+  if (!result.apiKey && !result.account?.token && !result.agent?.apiKey)
+    throw new Error('连接文件中至少需要一个密钥。');
   if (Object.hasOwn(value, 'preferences'))
     result.preferences = normalizePreferences(value.preferences);
   return result;
@@ -278,6 +296,7 @@ export function saveImportedConnection(input, storage = globalThis.localStorage)
     'openlux_key',
     'openlux_quota_credentials_v1',
     'openlux_account_balance_v1',
+    'openlux_agent_connection_v1',
   ];
   const previous = new Map();
   try {
@@ -302,6 +321,7 @@ export function saveImportedConnection(input, storage = globalThis.localStorage)
     ['openlux_base', connection.base],
     ['openlux_key', apiKey || null],
   ]);
+  if (connection.agent) writes.set('openlux_agent_connection_v1', JSON.stringify(connection.agent));
   if (connection.account) {
     const accounts = map('openlux_quota_credentials_v1'),
       balances = map('openlux_account_balance_v1');

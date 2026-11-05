@@ -16,6 +16,8 @@ import { reblendOutpaint } from './outpaint.js';
 import { cancelTask, retryTasks } from './jobs.js';
 import { askConfirm, guard, notify } from '../ui/dialogs.js';
 import { openEditor } from './editor.js';
+import { renderAgentRuns } from './agent.js';
+import { syncAgentRuns } from '../core/agent-budget.js';
 function duration(t) {
   const sec = Math.max(
     0,
@@ -94,11 +96,13 @@ function cardHTML(t) {
   })}${success ? ' · ' + duration(t) : ''}${t.priceEstimate !== null && t.priceEstimate !== undefined ? ' · 估 ' + money(t.priceEstimate, t.currency) : ''}</span></div><div class="card-actions">${success ? `<button class="btn continue" data-action="continue">继续改图 ${icon('arrow')}</button>` : t.status === 'queued' || t.status === 'retry_wait' ? '<button class="btn" data-action="queueEdit">编辑排队</button>' : t.status === 'running' ? '<button class="btn" data-action="cancel">取消</button>' : '<button class="btn" data-action="retry">' + icon('retry') + '重新生成</button>'}<button class="btn" data-action="edit">导入编辑</button><details class="card-menu"><summary aria-label="更多作品操作">···</summary><div class="card-menu-items">${menu}</div></details></div></div></article>`;
 }
 function render() {
+  syncAgentRuns();
+  renderAgentRuns();
   const previousCards = captureCards($('gallery'));
   const all = state.tasks.filter(existing),
     running = all.filter((t) => t.status === 'running').length,
     waiting = all.filter((t) => ['queued', 'retry_wait'].includes(t.status)).length;
-  $('welcome').hidden = all.length > 0;
+  $('welcome').hidden = all.length > 0 || state.agentRuns.some((run) => !run.dismissed);
   $('galleryHead').hidden = !all.length;
   $('queueSummary').textContent =
     running || waiting

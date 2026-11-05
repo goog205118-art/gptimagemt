@@ -40,6 +40,7 @@ function rootSnapshot() {
     presets: state.presets,
     assets: state.assets,
     ledger: state.ledger,
+    agentRuns: state.agentRuns,
     prefs: state.prefs,
     draft: state.draft,
     queuePaused: state.queuePaused,

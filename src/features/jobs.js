@@ -26,6 +26,16 @@ import { priceFor } from '../services/pricing.js';
 import { duration, render } from './gallery.js';
 import { persist } from '../core/storage.js';
 import { isOutpaintTask } from './outpaint.js';
+import { renderAgentRuns, startAgentPlan } from './agent.js';
+import {
+  agentCanRetry,
+  agentRunFor,
+  authorizeAgentRun,
+  nextAgentCandidate,
+  recordAgentHealth,
+  reserveAgentRequest,
+  syncAgentRuns,
+} from '../core/agent-budget.js';
 function currentLimit() {
   const limit = numeric('concurrency', 1, 8, 3);
   state.prefs.concurrency = limit;
@@ -53,6 +63,7 @@ function effectivePrompt(t) {
 }
 async function submit() {
   if (!state.ready || state.adding || state.submitting) return;
+  if (state.agentMode) return startAgentPlan();
   if (!state.key) {
     showSettings();
     return;
@@ -173,6 +184,63 @@ async function submit() {
     updateSend();
   }
 }
+async function enqueueAgentTasks(run, plan, settings, refs) {
+  if (!state.key) throw new Error('请先连接生图 API。');
+  const approvedKey = state.key,
+    approvedBase = state.base;
+  const base = {
+    prompt: plan.prompt,
+    constraints: [run.snapshot.constraints, plan.constraints].filter(Boolean).join('\n'),
+    settings,
+    refs: copyRefs(refs),
+    parentId: run.snapshot.parentId,
+    rootId: taskById(run.snapshot.parentId)?.rootId || run.snapshot.parentId || null,
+    projectId: run.snapshot.projectId,
+    mask: run.snapshot.mask ? { ...run.snapshot.mask } : null,
+  };
+  base.effectivePrompt = effectivePrompt({ ...base, variant: '' });
+  validateGptTask(base);
+  if (base.mask) base.maskValidation = await validateGptMask(base);
+  if (run.stopped) throw new Error('本次 Agent 已停止。');
+  if (state.key !== approvedKey || state.base !== approvedBase)
+    throw new Error('生图连接已改变，请重新确认方案。');
+  const batch = [];
+  for (let i = 0; i < plan.count; i++) {
+    const id = uid();
+    batch.push({
+      ...base,
+      id,
+      rootId: base.rootId || id,
+      refs: copyRefs(base.refs),
+      settings: { ...settings },
+      agentRunId: run.id,
+      agentRequests: 0,
+      agentTried: [settings.model + settings.route],
+      status: 'queued',
+      createdAt: Date.now(),
+      queueOrder: ++runtime.queueCounter,
+      batchId: run.id,
+      batchName: run.request.slice(0, 40),
+      variant: '',
+      variantAxis: '',
+      attempts: 0,
+      rateRetries: 0,
+      favorite: false,
+      discarded: false,
+      currency: run.currency,
+      pricePerImage: run.prices[settings.model + settings.route] ?? null,
+      priceEstimate: null,
+    });
+  }
+  authorizeAgentRun(run);
+  state.tasks.unshift(...batch);
+  run.status = 'running';
+  run.taskIds = batch.map((t) => t.id);
+  state.filter = 'all';
+  render();
+  await persist();
+  pump();
+}
 function pump() {
   if (!state.ready || state.queuePaused) return;
   let capacity = currentLimit() - controllers.size;
@@ -215,7 +283,9 @@ async function runTask(t) {
   t.attempts++;
   let timedOut = false,
     responseStatus = 0,
-    gotResult = false;
+    gotResult = false,
+    requestSent = false,
+    parsedResponse = false;
   const log = {
     id: uid(),
     taskId: t.id,
@@ -242,6 +312,10 @@ async function runTask(t) {
       ...prepared.headers,
       Authorization: 'Bearer ' + key,
     };
+    reserveAgentRequest(t);
+    renderAgentRuns();
+    await persist();
+    requestSent = true;
     let response = await fetch(s.base + prepared.path, {
       method: 'POST',
       headers,
@@ -255,6 +329,7 @@ async function runTask(t) {
       payload;
     try {
       payload = JSON.parse(raw);
+      parsedResponse = true;
     } catch {
       if (response.status === 429)
         payload = {
@@ -266,8 +341,13 @@ async function runTask(t) {
         throw new Error(`接口返回了无法识别的内容（HTTP ${response.status}），请检查 API 地址。`);
     }
     const correction = gptFormatCorrection(response.status, payload, prepared);
-    if (correction) {
+    if (correction && agentCanRetry(t)) {
+      recordAgentHealth(t, 'parameter_rejected', Date.now() - t.startedAt);
       prepared = await prepareGptRequest(t, correction);
+      reserveAgentRequest(t);
+      renderAgentRuns();
+      await persist();
+      parsedResponse = false;
       response = await fetch(s.base + prepared.path, {
         method: 'POST',
         headers,
@@ -280,6 +360,7 @@ async function runTask(t) {
       raw = await response.text();
       try {
         payload = JSON.parse(raw);
+        parsedResponse = true;
       } catch {
         throw new Error('格式字段兼容修正后，接口返回了无法识别的内容。');
       }
@@ -292,16 +373,33 @@ async function runTask(t) {
         t.transportCorrection = '已按当前渠道修正格式字段';
       }
     }
-    if (response.status === 429 && state.prefs.autoRateRetry && (t.rateRetries || 0) < 3) {
+    if (
+      response.status === 429 &&
+      state.prefs.autoRateRetry &&
+      (t.rateRetries || 0) < 3 &&
+      agentCanRetry(t)
+    ) {
       const wait = parseRetryAfter(response, t.rateRetries || 0);
       t.rateRetries = (t.rateRetries || 0) + 1;
       t.nextRunAt = Date.now() + wait;
       t.status = 'retry_wait';
       t.error = `接口限流，${Math.ceil(wait / 1000)} 秒后重试（${t.rateRetries}/3）。`;
       log.status = 'rate_limited';
+      recordAgentHealth(t, 'limited', Date.now() - t.startedAt);
       return;
     }
     if (!response.ok || payload.error) {
+      const next = nextAgentCandidate(t, response.status, payload, validateGptTask);
+      if (next) {
+        recordAgentHealth(t, 'unavailable', Date.now() - t.startedAt);
+        t.settings = next;
+        t.pricePerImage = agentRunFor(t).prices[next.model] ?? null;
+        t.status = 'queued';
+        t.error = '原模型或线路明确不可用，已切换到授权候选：' + next.model;
+        log.status = 'fallback';
+        log.error = t.error;
+        return;
+      }
       let message = payload.error?.message || payload.message || `HTTP ${response.status}`;
       if (typeof message !== 'string') message = JSON.stringify(message);
       throw new Error(`HTTP ${response.status} · ${message.slice(0, 500)}`);
@@ -342,6 +440,7 @@ async function runTask(t) {
     t.priceEstimate = t.pricePerImage ?? null;
     log.status = 'success';
     log.estimatedCost = t.pricePerImage ?? null;
+    recordAgentHealth(t, 'success', Date.now() - t.startedAt);
   } catch (e) {
     if (gotResult) {
       t.status = 'success';
@@ -350,7 +449,11 @@ async function runTask(t) {
       log.estimatedCost = t.pricePerImage ?? null;
     } else {
       const ambiguous =
-        timedOut || e instanceof TypeError || controller.signal.aborted || responseStatus >= 500;
+        timedOut ||
+        e instanceof TypeError ||
+        controller.signal.aborted ||
+        responseStatus >= 500 ||
+        (requestSent && responseStatus === 200 && !parsedResponse);
       t.status = ambiguous ? 'unknown' : 'failed';
       t.error = timedOut
         ? `生成超过 ${t.settings.timeout} 秒，已停止等待。服务端可能仍在处理，请核实用量后再重试。`
@@ -362,6 +465,7 @@ async function runTask(t) {
       t.finishedAt = Date.now();
       log.status = t.status;
       log.error = t.error;
+      recordAgentHealth(t, ambiguous ? 'unknown' : 'failed', Date.now() - t.startedAt);
     }
   } finally {
     clearTimeout(timer);
@@ -369,6 +473,7 @@ async function runTask(t) {
     if (log.status === 'running') log.status = t.status;
     t.finishedAt = t.status === 'retry_wait' ? null : t.finishedAt;
     controllers.delete(t.id);
+    syncAgentRuns();
     render();
     await persist();
     pump();
@@ -377,6 +482,16 @@ async function runTask(t) {
 async function retryTasks(tasks) {
   const eligible = tasks.filter((t) => !active(t) && existing(t));
   if (!eligible.length) return;
+  if (eligible.some((t) => t.agentRunId)) {
+    if (
+      !(await askConfirm(
+        '手动重新生成？',
+        '这会发起新的生图请求，不计入原 Agent 方案预算，也不会自动切换模型。',
+        '手动生成',
+      ))
+    )
+      return;
+  }
   if (!state.key) {
     showSettings();
     return;
@@ -417,8 +532,10 @@ async function retryTasks(tasks) {
         discarded: false,
       };
       if (!t.parentId) copy.rootId = copy.id;
+      delete copy.agentRunId;
       state.tasks.unshift(copy);
     } else {
+      delete t.agentRunId;
       t.settings = {
         ...t.settings,
         base: state.base,
@@ -473,4 +590,4 @@ function mountFeaturesJobs() {
       pump();
   }, 1000);
 }
-export { cancelTask, effectivePrompt, mountFeaturesJobs, pump, retryTasks };
+export { cancelTask, effectivePrompt, enqueueAgentTasks, mountFeaturesJobs, pump, retryTasks };
