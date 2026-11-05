@@ -212,7 +212,7 @@ function mountFeaturesReferences() {
             }),
           ]);
         }
-        return;
+        if (task || ref) return;
       }
       if (e.dataTransfer.files.length) {
         const result = await addFiles(e.dataTransfer.files, !!uri);

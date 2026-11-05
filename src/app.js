@@ -14,23 +14,9 @@ import { initializeAccountControls, refreshSavedAccountBalance } from './service
 import { $ } from './core/dom.js';
 import { renderProjects } from './features/library.js';
 import { render } from './features/gallery.js';
-function startDrag(e, id, blob, src, name) {
-  e.dataTransfer.effectAllowed = 'copy';
-  e.dataTransfer.setData('application/x-openlux-image', id);
-  if (src) {
-    e.dataTransfer.setData('text/uri-list', src);
-    e.dataTransfer.setData('text/plain', src);
-  }
-  if (blob) {
-    try {
-      e.dataTransfer.items.add(
-        new File([blob], name, {
-          type: blob.type,
-        }),
-      );
-    } catch {}
-    e.dataTransfer.setData('DownloadURL', `${blob.type}:${name}:${src}`);
-  }
+import { writeImageDrag } from './core/drag-image.js';
+function startDrag(e, id, src, name) {
+  writeImageDrag(e.dataTransfer, { id, src, name });
 }
 function normalizeTask(t) {
   t.refs = (t.refs || [])
@@ -155,10 +141,10 @@ function mountApp() {
       outImg = e.target.closest('[data-output]');
     if (refImg) {
       const ref = state.refs.find((r) => r.id === refImg.dataset.refId);
-      if (ref) startDrag(e, ref.id, ref.blob, referenceURL(ref), ref.name);
+      if (ref) startDrag(e, ref.id, referenceURL(ref), ref.name);
     } else if (outImg) {
       const t = taskById(outImg.dataset.output);
-      if (t) startDrag(e, t.id, t.outputBlob, imageURL(t), fileName(t));
+      if (t) startDrag(e, t.id, imageURL(t), fileName(t));
     }
   });
   addEventListener('beforeunload', (e) => {

@@ -46,7 +46,7 @@ function renderDetail() {
   $('detailTitle').textContent = taskTitle(t);
   $('detailMedia').innerHTML =
     t.status === 'success'
-      ? `<img src="${escapeHTML(imageURL(t))}" alt="${escapeHTML(t.prompt)}">`
+      ? `<img draggable="true" data-output="${t.id}" src="${escapeHTML(imageURL(t))}" alt="${escapeHTML(t.prompt)}" title="可拖出原图；若 PS 不接收，可使用下方复制图片或下载 PNG">`
       : `<div class="card-state"><div class="state-title">${STATUS_NAMES[t.status]}</div><div class="state-detail">${escapeHTML(t.error || '')}</div></div>`;
   if ($('detailMedia').dataset.version !== t.id + ':' + t.status) revealContent($('detailMedia'));
   $('detailMedia').dataset.version = t.id + ':' + t.status;
@@ -54,7 +54,7 @@ function renderDetail() {
   const parent = taskById(t.parentId);
   $('detailActions').innerHTML =
     (t.status === 'success'
-      ? '<button class="btn primary" data-detail-action="continue">继续改图</button><button class="btn" data-detail-action="mask">涂抹局部</button><button class="btn" data-detail-action="adapt">裁切 / 扩展</button><button class="btn" data-detail-action="download">下载</button>'
+      ? '<button class="btn primary" data-detail-action="continue">继续改图</button><button class="btn" data-detail-action="mask">涂抹局部</button><button class="btn" data-detail-action="adapt">裁切 / 扩展</button><button class="btn" data-detail-action="copyImage">复制图片到 PS</button><button class="btn" data-detail-action="downloadPng">下载 PNG</button><button class="btn" data-detail-action="download">原图</button>'
       : '') +
     (t.rawOutputBlob
       ? '<button class="btn" data-detail-action="reblend">重新自然融合（不生图）</button>'

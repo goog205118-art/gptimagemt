@@ -10,6 +10,7 @@ import { DEFAULT_BASE, STATUS_NAMES } from '../core/config.js';
 import { parseBase } from '../services/connection.js';
 import { normalizeTask } from '../app.js';
 import { renderLibrary, renderProjects } from './library.js';
+import { photoshopPng } from '../services/desktop-image.js';
 function safeName(value) {
   return (
     String(value || 'openlux')
@@ -43,6 +44,25 @@ async function download(t) {
     notify('原图暂不可直接下载，正在打开链接，可尝试右键保存。');
     if (validSrc(t.src)) window.open(t.src, '_blank', 'noopener,noreferrer');
   }
+}
+async function copyImageForPhotoshop(t) {
+  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined')
+    throw new Error('当前浏览器不能复制图片，请使用“下载 PNG”后放入 PS。');
+  const png = outputBlob(t).then(photoshopPng);
+  png.catch(() => {});
+  // Start the clipboard request during the click's user activation; conversion
+  // can then finish through the promised ClipboardItem data.
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+    notify('已复制原尺寸 PNG。在 PS 中打开画布后按 Ctrl / ⌘ + V 粘贴。');
+  } catch {
+    throw new Error('图片未能复制。请允许本次剪贴板操作，或使用“下载 PNG”后放入 PS。');
+  }
+}
+async function downloadPhotoshopPng(t) {
+  const blob = await photoshopPng(await outputBlob(t));
+  saveBlob(blob, fileName({ ...t, outputBlob: blob }));
+  notify('已下载原尺寸 PNG，可从下载列表或文件夹拖入 PS。');
 }
 const crcTable = Array.from(
   {
@@ -409,6 +429,8 @@ function mountFeaturesTransfers() {
 }
 export {
   download,
+  copyImageForPhotoshop,
+  downloadPhotoshopPng,
   exportBackup,
   exportUsage,
   fileName,

@@ -242,6 +242,9 @@ main {
   border: 1px solid var(--line);
   border-radius: 12px;
   width: 150px;
+  max-height: min(440px, calc(100dvh - 120px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: 0 3px 12px #0000000d;
 }
 .card-menu-items button {
