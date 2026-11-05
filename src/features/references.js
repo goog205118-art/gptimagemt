@@ -3,7 +3,8 @@ import { revealContent } from '../ui/motion.js';
 import { state, taskById, taskTitle } from '../core/state.js';
 import { extension, fetchImage, outputBlob, pruneURLs, referenceURL } from '../core/assets.js';
 import { escapeHTML, uid } from '../core/utils.js';
-import { MAX_FILE, MAX_REFS, ROLE_NAMES } from '../core/config.js';
+import { MAX_REFS, ROLE_NAMES } from '../core/config.js';
+import { ownImageBytes, decodeImageBlob } from '../core/image-input.js';
 import { expandComposer, renderEditContext, scheduleDraft, updateSend } from './composer.js';
 import { runtime } from '../core/runtime.js';
 import { guard, notify, setStatus } from '../ui/dialogs.js';
@@ -38,40 +39,45 @@ function renderRefs() {
   }
   pruneURLs();
 }
-async function validateFile(file) {
-  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type))
-    throw new Error(`${file.name || '图片'}：请使用 PNG、JPG 或 WebP。`);
-  if (file.size > MAX_FILE) throw new Error(`${file.name || '图片'} 超过 25 MB，请缩小后再添加。`);
-  try {
-    const bitmap = await createImageBitmap(file);
-    bitmap.close();
-  } catch {
-    throw new Error(`${file.name || '图片'} 无法读取，请使用有效图片。`);
+function addFiles(files, deferFailure = false) {
+  const source = Array.from(files),
+    available = Math.max(0, MAX_REFS - state.refs.length);
+  const list = source.slice(0, available);
+  if (!list.length) {
+    if (source.length) notify('最多添加 16 张参考图。');
+    return Promise.resolve({ count: 0, errors: [], full: !!source.length });
   }
-}
-function addFiles(files) {
-  const list = Array.from(files);
-  if (!list.length) return Promise.resolve();
+  // Start consuming drag/clipboard files during the event, before waiting for
+  // other uploads. Wrap errors immediately so queued work cannot reject unhandled.
+  const prepared = list.map((file) =>
+    ownImageBytes(file, file.name || '参考图').then(
+      (blob) => ({ blob }),
+      (error) => ({ error }),
+    ),
+  );
   state.adding++;
   updateSend();
   runtime.uploadChain = runtime.uploadChain
     .catch(() => {})
     .then(async () => {
       let count = 0;
-      const errors = [];
-      for (const file of list) {
+      const errors = source.length > available ? ['最多添加 16 张参考图，其余图片未加入。'] : [];
+      for (const [index, file] of list.entries()) {
         if (state.refs.length >= MAX_REFS) {
           errors.push('最多添加 16 张参考图。');
           break;
         }
         try {
-          await validateFile(file);
+          const result = await prepared[index];
+          if (result.error) throw result.error;
+          const image = await decodeImageBlob(result.blob, file.name || '参考图');
+          image.close();
           state.refs.push({
             id: uid(),
             name: file.name || '参考图.png',
             role: 'general',
             note: '',
-            blob: file,
+            blob: result.blob,
           });
           count++;
         } catch (e) {
@@ -84,7 +90,8 @@ function addFiles(files) {
         expandComposer();
         setStatus(`已添加 ${count} 张参考图，可为每张选择用途。`);
       }
-      if (errors.length) notify(errors.join(' '));
+      if (errors.length && (!deferFailure || count)) notify(errors.join(' '));
+      return { count, errors };
     })
     .finally(() => {
       state.adding--;
@@ -184,6 +191,10 @@ function mountFeaturesReferences() {
       $('dropOverlay').hidden = true;
       if (document.querySelector('dialog[open]')) return;
       const internal = e.dataTransfer.getData('application/x-openlux-image');
+      const uri = e.dataTransfer
+        .getData('text/uri-list')
+        .split(/\r?\n/)
+        .find((s) => s && !s.startsWith('#'));
       if (internal) {
         const task = taskById(internal),
           ref =
@@ -204,13 +215,9 @@ function mountFeaturesReferences() {
         return;
       }
       if (e.dataTransfer.files.length) {
-        await addFiles(e.dataTransfer.files);
-        return;
+        const result = await addFiles(e.dataTransfer.files, !!uri);
+        if (!uri || result?.count || result?.full || !result) return;
       }
-      const uri = e.dataTransfer
-        .getData('text/uri-list')
-        .split(/\r?\n/)
-        .find((s) => s && !s.startsWith('#'));
       if (uri) {
         const blob = await fetchImage(uri);
         await addFiles([

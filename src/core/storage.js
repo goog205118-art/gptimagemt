@@ -1,6 +1,7 @@
 import { runtime } from './runtime.js';
 import { state } from './state.js';
-import { storageWarning } from '../ui/dialogs.js';
+import { storageWarning, clearStorageWarning } from '../ui/dialogs.js';
+import { storageFailureMessage } from './storage-error.js';
 function storageGet(k) {
   try {
     return localStorage.getItem(k);
@@ -48,23 +49,36 @@ function rootSnapshot() {
 }
 function persist() {
   if (!runtime.db) return Promise.resolve(false);
-  const snapshot = structuredClone(rootSnapshot());
+  const revision = ++runtime.saveRevision;
+  let snapshot;
+  try {
+    snapshot = structuredClone(rootSnapshot());
+  } catch (error) {
+    storageWarning(storageFailureMessage(error), 'write');
+    return Promise.resolve(false);
+  }
   runtime.saveChain = runtime.saveChain
     .catch(() => {})
     .then(
       () =>
         new Promise((resolve, reject) => {
           const tx = runtime.db.transaction('state', 'readwrite');
-          tx.objectStore('state').put(snapshot, 'history');
-          tx.oncomplete = () => resolve(true);
-          tx.onerror = () => reject(tx.error);
-          tx.onabort = () => reject(tx.error);
+          const request = tx.objectStore('state').put(snapshot, 'history');
+          let writeError;
+          request.onerror = () => {
+            writeError = request.error;
+          };
+          tx.oncomplete = () => {
+            if (revision === runtime.saveRevision) clearStorageWarning('write');
+            resolve(true);
+          };
+          tx.onerror = () => reject(writeError || tx.error);
+          tx.onabort = () =>
+            reject(writeError || tx.error || new DOMException('Write aborted', 'AbortError'));
         }),
     )
-    .catch(() => {
-      storageWarning(
-        '本地保存失败，可能是空间不足。当前仍可使用，请先导出备份或下载图片，再清理旧记录。',
-      );
+    .catch((error) => {
+      if (revision === runtime.saveRevision) storageWarning(storageFailureMessage(error), 'write');
       return false;
     });
   return runtime.saveChain;

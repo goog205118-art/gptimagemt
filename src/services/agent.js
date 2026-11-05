@@ -1,6 +1,7 @@
 import { state } from '../core/state.js';
 import { storageGet } from '../core/storage.js';
 import { AGENT_MODEL } from '../../shared/agent-protocol.js';
+import { ownImageBytes, decodeImageBlob } from '../core/image-input.js';
 
 export const AGENT_CONNECTION_KEY = 'openlux_agent_connection_v1';
 export function loadAgentConnection() {
@@ -57,9 +58,11 @@ export async function agentQuery(action, fields = {}, signal, config) {
 }
 export async function referencePreviews(refs, signal) {
   const result = [];
-  for (const ref of refs) {
+  for (const [index, ref] of refs.entries()) {
     signal?.throwIfAborted();
-    const bitmap = await createImageBitmap(ref.blob);
+    const label = `参考图 ${index + 1}${ref.name ? '（' + ref.name + '）' : ''}`;
+    const blob = await ownImageBytes(ref.blob, label);
+    const bitmap = await decodeImageBlob(blob, label);
     try {
       const scale = Math.min(1, 640 / Math.max(bitmap.width, bitmap.height));
       const canvas = document.createElement('canvas');
@@ -68,7 +71,7 @@ export async function referencePreviews(refs, signal) {
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bitmap.source || bitmap, 0, 0, canvas.width, canvas.height);
       let preview = canvas.toDataURL('image/jpeg', 0.65);
       if (preview.length > 180000) preview = canvas.toDataURL('image/jpeg', 0.35);
       if (preview.length > 180000) throw new Error('参考图预览过大，请减少图片细节或尺寸。');

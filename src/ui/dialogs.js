@@ -10,9 +10,17 @@ function setStatus(message, error = false) {
   $('status').textContent = message;
   $('status').classList.toggle('error', error);
 }
-function storageWarning(message) {
+function storageWarning(message, source = 'general') {
   $('storageNote').hidden = false;
   $('storageNote').textContent = message;
+  $('storageNote').dataset.source = source;
+}
+function clearStorageWarning(source) {
+  if ($('storageNote').dataset.source === source) {
+    $('storageNote').hidden = true;
+    $('storageNote').textContent = '';
+    delete $('storageNote').dataset.source;
+  }
 }
 function guard(fn) {
   return async (...args) => {
@@ -77,4 +85,5 @@ export {
   setStatus,
   showDialog,
   storageWarning,
+  clearStorageWarning,
 };
