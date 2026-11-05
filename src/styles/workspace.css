@@ -174,10 +174,10 @@ dialog {
   padding: 0;
   overflow: hidden;
   max-height: calc(100dvh - 32px);
+  flex-direction: column;
 }
 .detail-dialog[open] {
   display: flex;
-  flex-direction: column;
 }
 .detail-dialog > .dialog-title {
   padding: 20px 22px 16px;
@@ -271,10 +271,10 @@ dialog {
   padding: 0;
   overflow: hidden;
   max-height: calc(100dvh - 32px);
+  flex-direction: column;
 }
 .editor-dialog[open] {
   display: flex;
-  flex-direction: column;
 }
 .editor-dialog > .dialog-title {
   padding: 20px 24px 14px;

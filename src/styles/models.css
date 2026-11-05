@@ -161,10 +161,11 @@
   height: min(710px, calc(100dvh - 32px));
   max-height: calc(100dvh - 32px);
   overflow: hidden;
+  /* Keep the column layout after [open] is removed, while display transitions out. */
+  flex-direction: column;
 }
 .quota-dialog[open] {
   display: flex;
-  flex-direction: column;
 }
 .quota-header {
   padding: 22px 24px 0;

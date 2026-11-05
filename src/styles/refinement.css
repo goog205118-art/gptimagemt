@@ -548,10 +548,10 @@ dialog[open]::backdrop {
   height: min(700px, calc(100dvh - 32px));
   overflow: hidden;
   padding: 22px 24px 0;
+  flex-direction: column;
 }
 #libraryDlg[open] {
   display: flex;
-  flex-direction: column;
 }
 #libraryDlg > .dialog-title {
   flex: none;
