@@ -13,6 +13,11 @@ function renderRefs() {
   );
   $('refs').hidden = !state.refs.length;
   $('clearRefs').hidden = !state.refs.length;
+  $('referenceSettingsBtn').hidden = !state.refs.length;
+  if (!state.refs.length) $('composer').classList.remove('is-ref-editing');
+  const editing = $('composer').classList.contains('is-ref-editing');
+  $('referenceSettingsBtn').setAttribute('aria-expanded', String(editing));
+  $('referenceSettingsBtn').textContent = editing ? '收起参考设置' : '参考设置';
   $('refs').innerHTML = state.refs
     .map(
       (ref, i) =>

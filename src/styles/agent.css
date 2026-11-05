@@ -1,17 +1,17 @@
 .composer-modes {
   display: flex;
   gap: 6px;
-  flex: 0 1 460px;
-  width: 460px;
+  flex: 0 1 340px;
+  width: 340px;
   min-width: 0;
 }
 .mode-control {
-  --mode-label-width: 58px;
+  --mode-label-width: 54px;
   display: flex;
   align-items: center;
   min-width: 0;
   flex: 0 0 var(--mode-label-width);
-  height: 36px;
+  height: 34px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
@@ -21,7 +21,7 @@
     border-color 240ms var(--ease-standard);
 }
 .manual-control {
-  --mode-label-width: 50px;
+  --mode-label-width: 46px;
 }
 .mode-control.is-selected {
   flex-grow: 1;
@@ -31,7 +31,7 @@
 .mode-label {
   flex: none;
   width: calc(var(--mode-label-width) - 2px);
-  height: 34px;
+  height: 32px;
   padding: 0 8px;
   border-radius: 999px;
   font-size: 12px;
@@ -61,9 +61,9 @@
   display: flex;
   width: 100%;
   max-width: none;
-  height: 34px;
-  min-height: 34px;
-  gap: 7px;
+  height: 32px;
+  min-height: 32px;
+  gap: 5px;
   padding: 0 9px 0 2px;
   border: 0;
   border-radius: 0 999px 999px 0;
@@ -90,17 +90,78 @@
 .composer-modes .summary-count {
   flex: none;
 }
+#agentSettingsBtn .summary-extra,
+#agentSettingsBtn .summary-divider {
+  display: none;
+}
 .agent-runs {
   display: grid;
-  gap: 12px;
-  margin-block: 16px;
+  margin-block: 0 12px;
 }
-.agent-run {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 16px 18px;
+.agent-record {
+  border-bottom: 1px solid var(--line);
+  padding: 14px 0;
   min-width: 0;
+}
+.agent-record:last-child {
+  border-bottom: 0;
+}
+.agent-history-dialog {
+  width: min(680px, calc(100% - 32px));
+}
+.agent-history-shell {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+}
+.agent-history-shell .preset-dialog-body {
+  padding-bottom: 8px;
+}
+.agent-history-trigger {
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 28px;
+  padding: 4px 8px;
+}
+.agent-status-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
   background: var(--surface);
+}
+.agent-status-line > strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  font-size: 12px;
+}
+.agent-status-line > strong svg {
+  width: 16px;
+  height: 16px;
+}
+.agent-status-line .agent-run-summary {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.agent-line-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.agent-line-actions .btn {
+  font-size: 12px;
+  min-height: 28px;
+  padding: 4px 8px;
 }
 .agent-run-heading,
 .agent-run-footer {
@@ -123,11 +184,11 @@
   gap: 4px;
 }
 .agent-run-request {
-  margin-top: 8px;
-  font-size: 14px;
+  margin-top: 6px;
+  font-size: 13px;
   overflow-wrap: anywhere;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -142,10 +203,10 @@
   color: var(--muted);
   font-size: 11px;
 }
-.agent-run[data-agent-state='success'] .agent-run-summary {
+.agent-record[data-agent-state='success'] .agent-run-summary {
   display: none;
 }
-.agent-run[data-agent-state='success'] .agent-run-request {
+.agent-record[data-agent-state='success'] .agent-run-request {
   -webkit-line-clamp: 1;
   margin-bottom: 10px;
 }
@@ -255,8 +316,16 @@
   .agent-candidates {
     grid-template-columns: minmax(0, 1fr);
   }
-  .agent-run {
-    padding: 12px 14px;
+  .agent-status-line {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+  .agent-status-line .agent-run-summary {
+    order: 2;
+    flex-basis: 100%;
+  }
+  .agent-line-actions {
+    margin-left: auto;
   }
   .agent-run-footer {
     align-items: start;

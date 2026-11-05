@@ -154,6 +154,27 @@ dialog {
   opacity: 0.3;
   cursor: default;
 }
+.composer:not(.is-ref-editing) .reference {
+  grid-template-rows: 40px 22px;
+  width: 100px;
+  padding: 4px;
+}
+.composer:not(.is-ref-editing) .reference-main,
+.composer:not(.is-ref-editing) .reference img {
+  height: 40px;
+}
+.composer:not(.is-ref-editing) .reference .picker-button {
+  height: 22px;
+  min-height: 22px;
+}
+.composer:not(.is-ref-editing) .reference input,
+.composer:not(.is-ref-editing) .ref-order {
+  display: none;
+}
+.composer:not(.is-ref-editing) .refs {
+  padding-block: 4px;
+  margin-bottom: 8px;
+}
 .composer-peek {
   display: flex;
   align-items: center;

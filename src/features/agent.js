@@ -418,15 +418,21 @@ export function renderAgentRuns() {
     )
     .sort((a, b) => {
       const rank = (run) =>
-        ['planning', 'running'].includes(run.status)
+        ['review', 'questions'].includes(run.status)
           ? 0
-          : ['review', 'questions'].includes(run.status)
+          : ['planning', 'running'].includes(run.status)
             ? 1
-            : 2;
+            : ['unknown', 'failed'].includes(run.status)
+              ? 2
+              : 3;
       return rank(a) - rank(b) || b.createdAt - a.createdAt;
-    })
-    .slice(0, 12);
-  root.hidden = !runs.length;
+    });
+  const current = runs.find((run) =>
+    ['questions', 'review', 'failed', 'unknown', 'planning', 'running'].includes(run.status),
+  );
+  root.hidden = !current;
+  $('agentHistoryBtn').hidden = !runs.length;
+  $('agentHistoryBtn').textContent = `Agent 记录 · ${runs.length}`;
   const signature = JSON.stringify(
     runs.map((r) => [
       r.id,
@@ -440,24 +446,62 @@ export function renderAgentRuns() {
   );
   if (root.dataset.signature === signature) return;
   root.dataset.signature = signature;
-  root.innerHTML = runs
+  root.innerHTML = current
+    ? `<article class="agent-run agent-status-line" data-agent-run="${current.id}" data-agent-state="${current.status}">
+    <strong>${['planning', 'running'].includes(current.status) ? '<span class="spinner"></span>' : icon('mark')} Agent · ${AGENT_STATUSES[current.status]}</strong>
+    <span class="agent-run-summary" title="${escapeHTML(current.error || current.request)}">${escapeHTML(current.error || current.request)}</span>
+    <div class="agent-line-actions">${['questions', 'review'].includes(current.status) ? '<button class="btn primary" data-agent-action="review">' + (current.status === 'questions' ? '补充需求' : '确认方案') + '</button>' : ''}
+    ${['planning', 'running'].includes(current.status) ? '<button class="btn" data-agent-action="stop">停止</button>' : ''}
+    <button class="btn" data-agent-action="history">${runs.length > 1 ? runs.length + ' 条记录' : '查看记录'}</button></div></article>`
+    : '';
+  const expanded = new Set(
+    Array.from(
+      $('agentHistoryList').querySelectorAll('[data-agent-run] details[open]'),
+      (el) => el.closest('[data-agent-run]').dataset.agentRun,
+    ),
+  );
+  const focused = $('agentHistoryList').contains(document.activeElement)
+    ? {
+        runId: document.activeElement.closest('[data-agent-run]')?.dataset.agentRun,
+        action: document.activeElement.dataset.agentAction,
+        details: document.activeElement.matches('summary'),
+      }
+    : null;
+  const scrollTop = $('agentHistoryList').scrollTop;
+  $('agentHistoryList').innerHTML = runs
     .map(
       (
         run,
-      ) => `<article class="agent-run" data-agent-run="${run.id}" data-agent-state="${run.status}">
+      ) => `<article class="agent-record" data-agent-run="${run.id}" data-agent-state="${run.status}">
     <div class="agent-run-heading"><strong>${['planning', 'running'].includes(run.status) ? '<span class="spinner"></span>' : icon('mark')} Agent · ${AGENT_STATUSES[run.status] || '已停止'}</strong><div>${['planning', 'running', 'questions', 'review'].includes(run.status) ? '<button class="btn" data-agent-action="stop">停止</button>' : ''}<button class="icon-btn" data-agent-action="dismiss" aria-label="隐藏方案记录">${icon('close')}</button></div></div>
     <p class="agent-run-request">${escapeHTML(run.request)}</p>
-    <p class="agent-run-summary">${escapeHTML(run.error || run.plan?.summary || '正在分析需求与参考图…')}</p>
+    ${['failed', 'unknown'].includes(run.status) ? '<p class="agent-run-summary">' + escapeHTML(run.error || '查看图片卡片与执行记录。') + '</p>' : ''}
     <div class="agent-run-footer"><span>${run.requests || 0}/${run.maxRequests} 次生图请求${run.usedEstimate ? ' · 已预留估算 ' + money(run.usedEstimate, run.currency) : ''}</span><div>
     ${['questions', 'review'].includes(run.status) ? '<button class="btn primary" data-agent-action="review">' + (run.status === 'questions' ? '补充需求' : '查看并确认方案') + '</button>' : ''}
     ${run.status !== 'planning' ? '<button class="btn" data-agent-action="import">导入输入框</button>' : ''}
     ${run.status === 'failed' ? '<button class="btn" data-agent-action="replan">手动重新规划</button>' : ''}</div></div>
-    <details class="agent-execution"><summary>方案与执行记录</summary><p>规划模型：${escapeHTML(run.plannerModel || getAgentConnection().model)} · 规划 ${run.planningUsage?.length || 0} 轮</p>
+    <details class="agent-execution" ${expanded.has(run.id) ? 'open' : ''}><summary>方案与执行记录</summary><p>${escapeHTML(run.request)}</p><p>${escapeHTML(run.error || run.plan?.summary || '')}</p><p>规划模型：${escapeHTML(run.plannerModel || getAgentConnection().model)} · 规划 ${run.planningUsage?.length || 0} 轮</p>
     ${run.plan?.decision === 'ready' ? `<p>${escapeHTML(run.plan.model)} · ${escapeHTML(run.plan.size)} · ${escapeHTML(run.plan.quality)} · ${run.plan.count} 张</p><p>${escapeHTML(run.plan.prompt)}</p>` : ''}
     <ol>${(run.requestLog || []).map((item) => `<li>${escapeHTML(item.model)} · ${escapeHTML({ success: '成功', failed: '失败', unknown: '结果待核实', limited: '限流', unavailable: '不可用，切换候选' }[item.outcome] || '已提交')} · ${item.estimate == null ? '无价格估算' : '预留估算 ' + money(item.estimate, run.currency)}</li>`).join('')}</ol></details></article>`,
     )
     .join('');
-  revealContent(root.firstElementChild);
+  if (focused?.runId) {
+    const row = Array.from($('agentHistoryList').querySelectorAll('[data-agent-run]')).find(
+      (el) => el.dataset.agentRun === focused.runId,
+    );
+    const target = focused.details
+      ? row?.querySelector('summary')
+      : Array.from(row?.querySelectorAll('[data-agent-action]') || []).find(
+          (el) => el.dataset.agentAction === focused.action,
+        );
+    (
+      target ||
+      row?.querySelector('summary') ||
+      $('agentHistoryDlg').querySelector('[data-close]')
+    )?.focus({ preventScroll: true });
+  }
+  $('agentHistoryList').scrollTop = scrollTop;
+  if (root.firstElementChild) revealContent(root.firstElementChild);
 }
 function settingsValue() {
   const useImageKey = $('agentReuseKey').checked;
@@ -520,6 +564,7 @@ async function stopRun(run) {
   await persist();
 }
 export function mountAgent() {
+  $('agentHistoryBtn').onclick = () => showDialog('agentHistoryDlg');
   $('agentModeBtn').onclick = () => {
     if (state.agentMode) return;
     setComposerMode(true);
@@ -606,12 +651,16 @@ export function mountAgent() {
   };
   $('agentCheckModel').onclick = () => check(false);
   $('agentTestPlan').onclick = () => check(true);
-  $('agentRuns').onclick = guard(async (e) => {
+  const activityAction = guard(async (e) => {
     const button = e.target.closest('[data-agent-action]'),
       run = runById(button?.closest('[data-agent-run]')?.dataset.agentRun);
     if (!run || !button) return;
     const action = button.dataset.agentAction;
-    if (action === 'review') openPlan(run);
+    if (action === 'history') showDialog('agentHistoryDlg');
+    if (action === 'review') {
+      $('agentHistoryDlg').close();
+      openPlan(run);
+    }
     if (action === 'stop') await stopRun(run);
     if (action === 'dismiss') {
       if (['planning', 'running', 'questions', 'review'].includes(run.status)) await stopRun(run);
@@ -621,12 +670,15 @@ export function mountAgent() {
     }
     if (action === 'import') importRun(run);
     if (action === 'replan') {
+      $('agentHistoryDlg').close();
       run.rounds = 0;
       run.answers = [];
       run.stopped = false;
       await planRun(run);
     }
   });
+  $('agentRuns').onclick = activityAction;
+  $('agentHistoryList').onclick = activityAction;
   $('agentQuestions').onchange = (e) => {
     const run = runById(editingRunId);
     if (!run) return;

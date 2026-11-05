@@ -134,6 +134,15 @@
               <h2>你的创作</h2>
               <span class="queue-summary" id="queueSummary"></span
               ><button class="btn" id="groupToggle" aria-pressed="false">按创作分组</button>
+              <button
+                class="btn agent-history-trigger"
+                id="agentHistoryBtn"
+                hidden
+                aria-haspopup="dialog"
+                aria-controls="agentHistoryDlg"
+              >
+                Agent 记录
+              </button>
             </div>
             <div class="inline gallery-controls">
               <div class="filters" role="group" aria-label="筛选作品">
@@ -194,6 +203,14 @@
                   <div class="inline">
                     <span id="draftSaved">草稿自动保存</span
                     ><button type="button" id="savePresetBtn">存为预设</button
+                    ><button
+                      type="button"
+                      id="referenceSettingsBtn"
+                      hidden
+                      aria-expanded="false"
+                      aria-controls="refs"
+                    >
+                      参考设置</button
                     ><button type="button" id="clearRefs" hidden>清空参考图</button>
                   </div>
                 </div>
@@ -1172,6 +1189,21 @@
           ><button type="submit" class="btn primary" id="connectionFileSubmit">加密导出</button>
         </div>
       </form>
+    </dialog>
+    <dialog
+      id="agentHistoryDlg"
+      class="preset-dialog agent-history-dialog"
+      aria-labelledby="agentHistoryTitle"
+    >
+      <div class="agent-history-shell">
+        <div class="dialog-title">
+          <h2 id="agentHistoryTitle">Agent 记录</h2>
+          <button type="button" class="icon-btn" data-close="agentHistoryDlg" aria-label="关闭">
+            <svg aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <div class="preset-dialog-body" id="agentHistoryList"></div>
+      </div>
     </dialog>
     <dialog
       id="agentSettingsDlg"

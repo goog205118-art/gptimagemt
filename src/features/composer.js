@@ -342,6 +342,11 @@ function scheduleComposerCollapse() {
   }, 140);
 }
 function mountFeaturesComposer() {
+  $('referenceSettingsBtn').onclick = () => {
+    const editing = $('composer').classList.toggle('is-ref-editing');
+    $('referenceSettingsBtn').setAttribute('aria-expanded', String(editing));
+    $('referenceSettingsBtn').textContent = editing ? '收起参考设置' : '参考设置';
+  };
   $('advancedToggle').onclick = expandAdvanced;
   new ResizeObserver((entries) =>
     document.documentElement.style.setProperty('--header-h', entries[0].target.offsetHeight + 'px'),
