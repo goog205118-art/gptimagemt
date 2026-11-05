@@ -17,6 +17,33 @@ import { renderRefs } from './references.js';
 import { money, priceFor } from '../services/pricing.js';
 import { pump } from './jobs.js';
 import { uid } from '../core/utils.js';
+import { getAgentConnection } from '../services/agent.js';
+function syncComposerModes() {
+  const agent = state.agentMode;
+  $('agentModeBtn').setAttribute('aria-pressed', String(agent));
+  $('manualModeBtn').setAttribute('aria-pressed', String(!agent));
+  $('agentModeBtn').title = agent ? 'Agent 模式（已选）' : '切换 Agent 模式';
+  $('manualModeBtn').title = agent ? '切换手动模式' : '手动模式（已选）';
+  $('agentControl').classList.toggle('is-selected', agent);
+  $('manualControl').classList.toggle('is-selected', !agent);
+  $('agentModeOptions').inert = !agent;
+  $('manualModeOptions').inert = agent;
+  $('agentModeOptions').setAttribute('aria-hidden', String(!agent));
+  $('manualModeOptions').setAttribute('aria-hidden', String(agent));
+  $('composer').classList.toggle('agent-mode', agent);
+  const model = getAgentConnection().model;
+  $('agentSummaryModel').textContent = model.replace(/^gpt-/, 'GPT ').replace(/-sol$/, ' Sol');
+  $('agentSummaryModel').title = model;
+  $('agentSummaryExecution').textContent = state.prefs.agentOptions?.automatic ? '自动' : '确认';
+  $('agentSummaryLimit').textContent = '≤' + (state.prefs.agentOptions?.maxRequests || 3) + '次';
+  $('agentSettingsBtn').title =
+    `Agent 设置 · ${model} · 最多 ${state.prefs.agentOptions?.maxRequests || 3} 次生图请求`;
+}
+function setComposerMode(agent) {
+  closeParameterPanel(false);
+  state.agentMode = agent;
+  updateSend();
+}
 function settingsSnapshot() {
   return {
     model: $('model').value,
@@ -116,6 +143,7 @@ function variantsList() {
     .filter(Boolean);
 }
 function updateSend() {
+  syncComposerModes();
   updateComposerPeek();
   applyGptProfile(false);
   const n = numeric('n', 1, 4, 1),
@@ -405,6 +433,7 @@ export {
   scheduleDraft,
   setSelect,
   settingsSnapshot,
+  setComposerMode,
   updateSend,
   variantsList,
 };

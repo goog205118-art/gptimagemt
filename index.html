@@ -218,25 +218,6 @@
             </button>
             <div class="composer-toolbar">
               <button
-                type="button"
-                class="agent-toggle"
-                id="agentModeBtn"
-                aria-pressed="false"
-                title="切换 Agent 模式"
-              >
-                Agent
-              </button>
-              <button
-                type="button"
-                class="icon-btn"
-                id="agentSettingsBtn"
-                aria-label="Agent 设置"
-                title="Agent 设置"
-                hidden
-              >
-                <svg aria-hidden="true"><use href="#i-settings" /></svg>
-              </button>
-              <button
                 class="icon-btn attachment"
                 type="button"
                 id="addRef"
@@ -245,25 +226,72 @@
               >
                 <svg aria-hidden="true"><use href="#i-plus" /></svg>
               </button>
+              <div class="composer-modes" role="group" aria-label="创作模式">
+                <div class="mode-control agent-control" id="agentControl">
+                  <button
+                    type="button"
+                    class="mode-label"
+                    id="agentModeBtn"
+                    aria-pressed="false"
+                    title="切换 Agent 模式"
+                  >
+                    Agent
+                  </button>
+                  <div class="mode-options" id="agentModeOptions" inert>
+                    <button
+                      type="button"
+                      class="generation-summary mode-settings"
+                      id="agentSettingsBtn"
+                      aria-label="Agent 设置"
+                      title="Agent 设置"
+                      aria-haspopup="dialog"
+                      aria-controls="agentSettingsDlg"
+                    >
+                      <svg aria-hidden="true"><use href="#i-settings" /></svg>
+                      <span class="summary-model" id="agentSummaryModel">GPT 6.1 Sol</span>
+                      <span class="summary-divider" aria-hidden="true"></span>
+                      <span class="summary-extra" id="agentSummaryExecution">确认</span>
+                      <span class="summary-count" id="agentSummaryLimit">≤3次</span>
+                      <svg class="summary-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="m4 10 4-4 4 4" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="mode-control manual-control is-selected" id="manualControl">
+                  <button
+                    type="button"
+                    class="mode-label"
+                    id="manualModeBtn"
+                    aria-pressed="true"
+                    title="手动模式（已选）"
+                  >
+                    手动
+                  </button>
+                  <div class="mode-options" id="manualModeOptions">
+                    <button
+                      type="button"
+                      class="generation-summary mode-settings"
+                      id="advancedToggle"
+                      aria-label="打开生成设置"
+                      aria-expanded="false"
+                      aria-haspopup="dialog"
+                      aria-controls="advanced"
+                    >
+                      <svg aria-hidden="true"><use href="#i-settings" /></svg
+                      ><span class="summary-model" id="summaryModel">GPT Image 2</span
+                      ><span class="summary-divider" aria-hidden="true"></span
+                      ><span id="summarySize">1:1</span
+                      ><span class="summary-extra" id="summaryQuality">标准</span
+                      ><span class="summary-count" id="summaryCount">×1</span
+                      ><svg class="summary-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="m4 10 4-4 4 4" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
               <button
-                type="button"
-                class="generation-summary"
-                id="advancedToggle"
-                aria-label="打开生成设置"
-                aria-expanded="false"
-                aria-haspopup="dialog"
-                aria-controls="advanced"
-              >
-                <svg aria-hidden="true"><use href="#i-settings" /></svg
-                ><span class="summary-model" id="summaryModel">GPT Image 2</span
-                ><span class="summary-divider" aria-hidden="true"></span
-                ><span id="summarySize">1:1</span
-                ><span class="summary-extra" id="summaryQuality">标准</span
-                ><span class="summary-count" id="summaryCount">×1</span
-                ><svg class="summary-chevron" viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="m4 10 4-4 4 4" />
-                </svg></button
-              ><button
                 type="button"
                 class="icon-btn prompt-preset-trigger"
                 id="promptPresetsBtn"

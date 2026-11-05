@@ -21,7 +21,14 @@ import {
 import { splitGptModel } from '../../shared/model-ids.js';
 import { fetchGptModelCatalog } from '../services/connection.js';
 import { money, priceFor } from '../services/pricing.js';
-import { readDraft, restoreDraft, scheduleDraft, focusComposer, updateSend } from './composer.js';
+import {
+  readDraft,
+  restoreDraft,
+  scheduleDraft,
+  focusComposer,
+  updateSend,
+  setComposerMode,
+} from './composer.js';
 import { effectivePrompt, enqueueAgentTasks, cancelTask } from './jobs.js';
 import { render } from './gallery.js';
 import { guard, notify, showDialog, setStatus } from '../ui/dialogs.js';
@@ -514,12 +521,13 @@ async function stopRun(run) {
 }
 export function mountAgent() {
   $('agentModeBtn').onclick = () => {
-    state.agentMode = !state.agentMode;
-    $('agentModeBtn').setAttribute('aria-pressed', String(state.agentMode));
-    $('agentSettingsBtn').hidden = !state.agentMode;
-    $('composer').classList.toggle('agent-mode', state.agentMode);
-    updateSend();
-    if (state.agentMode) setStatus('Agent 会先规划与补问，确认方案后才生图。');
+    if (state.agentMode) return;
+    setComposerMode(true);
+    setStatus('Agent 会先规划与补问，确认方案后才生图。');
+  };
+  $('manualModeBtn').onclick = () => {
+    setComposerMode(false);
+    setStatus('已切换手动模式，可以自行调整生成参数。');
   };
   $('agentSettingsBtn').onclick = showAgentSettings;
   $('agentReuseKey').onchange = () => {
@@ -558,6 +566,7 @@ export function mountAgent() {
       ),
     };
     await persist();
+    updateSend();
     $('agentSettingsDlg').close();
     notify('Agent 设置已保存。');
   });
@@ -720,10 +729,7 @@ function importRun(run) {
   draft.variantAxis = '';
   draft.variants = '';
   restoreDraft(draft);
-  state.agentMode = false;
-  $('agentModeBtn').setAttribute('aria-pressed', 'false');
-  $('agentSettingsBtn').hidden = true;
-  $('composer').classList.remove('agent-mode');
+  setComposerMode(false);
   scheduleDraft();
   focusComposer();
   updateSend();
