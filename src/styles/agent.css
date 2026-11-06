@@ -94,10 +94,6 @@
 #agentSettingsBtn .summary-divider {
   display: none;
 }
-.agent-runs {
-  display: grid;
-  margin-block: 0 12px;
-}
 .agent-record {
   border-bottom: 1px solid var(--line);
   padding: 14px 0;
@@ -117,51 +113,114 @@
 .agent-history-shell .preset-dialog-body {
   padding-bottom: 8px;
 }
-.agent-history-trigger {
-  font-size: 12px;
+.agent-history-empty {
+  padding-block: 8px 16px;
   color: var(--muted);
-  min-height: 28px;
-  padding: 4px 8px;
+  font-size: 13px;
 }
-.agent-status-line {
+#agentActivityBtn[aria-expanded='true'] {
+  background: var(--soft);
+  color: var(--ink);
+}
+.agent-activity-dot {
+  position: absolute;
+  inset: 6px 5px auto auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 2px var(--bg);
+  pointer-events: none;
+}
+.agent-activity-dot.needs-input {
+  background: var(--ink);
+}
+.agent-activity {
+  --activity-motion: 240ms;
+  --activity-offset: clamp(8px, calc(100dvh - 390px), 96px);
+  position: fixed;
+  z-index: 12;
+  inset-block-start: calc(var(--header-h, 52px) + var(--activity-offset));
+  inset-inline-end: max(var(--page-gutter), calc((100% - var(--page-width)) / 2));
   display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 7px 10px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  flex-direction: column;
+  width: min(320px, calc(100% - 2 * var(--page-gutter)));
+  max-height: calc(100dvh - var(--header-h, 52px) - var(--activity-offset) - 12px);
+  border-radius: 16px;
   background: var(--surface);
+  box-shadow: 0 6px 24px #00000026;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateX(10px);
+  pointer-events: none;
+  transition:
+    opacity var(--activity-motion) var(--ease-standard),
+    transform var(--activity-motion) var(--ease-standard),
+    visibility 0s var(--activity-motion);
 }
-.agent-status-line > strong {
+.agent-activity.is-open {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+.agent-activity-head,
+.agent-activity-actions {
   display: flex;
   align-items: center;
-  gap: 7px;
   flex: none;
-  font-size: 12px;
+  gap: 6px;
+  padding: 8px 12px;
 }
-.agent-status-line > strong svg {
-  width: 16px;
-  height: 16px;
+.agent-activity-head {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
 }
-.agent-status-line .agent-run-summary {
-  flex: 1;
-  min-width: 0;
+.agent-activity-head h2,
+.agent-activity-stage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
+}
+.agent-activity-head h2 {
+  font-size: 14px;
+}
+.agent-activity-head h2 svg {
+  width: 17px;
+  height: 17px;
+}
+.agent-activity-head .inline {
+  gap: 2px;
+}
+.agent-activity-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.agent-activity-description {
+  margin: 6px 0 0;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.agent-activity-request {
+  margin: 8px 0 0;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
-}
-.agent-line-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-}
-.agent-line-actions .btn {
+  color: var(--muted);
   font-size: 12px;
-  min-height: 28px;
-  padding: 4px 8px;
+}
+.agent-activity-actions {
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
 }
 .agent-run-heading,
 .agent-run-footer {
@@ -313,19 +372,11 @@
   border-radius: 10px;
 }
 @media (max-width: 600px) {
+  .agent-activity {
+    --activity-offset: clamp(8px, calc(100dvh - 420px), 124px);
+  }
   .agent-candidates {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .agent-status-line {
-    flex-wrap: wrap;
-    gap: 6px 10px;
-  }
-  .agent-status-line .agent-run-summary {
-    order: 2;
-    flex-basis: 100%;
-  }
-  .agent-line-actions {
-    margin-left: auto;
   }
   .agent-run-footer {
     align-items: start;
@@ -349,6 +400,10 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .agent-activity {
+    --activity-motion: 70ms;
+    transform: none;
+  }
   .mode-control,
   .mode-label,
   .mode-options {

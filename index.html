@@ -85,6 +85,18 @@
             <svg aria-hidden="true"><use href="#i-queue" /></svg>
             <span class="toolbar-badge" id="queueCount" hidden>0</span>
           </button>
+          <button
+            type="button"
+            class="toolbar-icon"
+            id="agentActivityBtn"
+            aria-label="Agent 记录"
+            data-tooltip="Agent 记录"
+            aria-controls="agentActivity agentHistoryDlg"
+            aria-expanded="false"
+          >
+            <svg aria-hidden="true"><use href="#i-mark" /></svg>
+            <span class="agent-activity-dot" id="agentActivityDot" aria-hidden="true" hidden></span>
+          </button>
           <button class="toolbar-icon" id="newBtn" aria-label="新的创作" data-tooltip="新的创作">
             <svg aria-hidden="true"><use href="#i-plus" /></svg>
           </button>
@@ -134,15 +146,6 @@
               <h2>你的创作</h2>
               <span class="queue-summary" id="queueSummary"></span
               ><button class="btn" id="groupToggle" aria-pressed="false">按创作分组</button>
-              <button
-                class="btn agent-history-trigger"
-                id="agentHistoryBtn"
-                hidden
-                aria-haspopup="dialog"
-                aria-controls="agentHistoryDlg"
-              >
-                Agent 记录
-              </button>
             </div>
             <div class="inline gallery-controls">
               <div class="filters" role="group" aria-label="筛选作品">
@@ -182,7 +185,6 @@
               ><button id="starterReference">从参考图开始</button>
             </div>
           </div>
-          <div id="agentRuns" class="agent-runs" aria-label="Agent 创作方案" hidden></div>
           <div id="gallery" class="gallery" aria-label="图片与生成任务"></div>
           <button class="btn outlined load-more" id="loadMore" hidden>显示更多作品</button>
         </section>
@@ -634,6 +636,31 @@
           </div>
         </section>
       </main>
+      <section class="agent-activity" id="agentActivity" aria-labelledby="agentActivityTitle" inert>
+        <header class="agent-activity-head">
+          <h2 id="agentActivityTitle"><svg aria-hidden="true"><use href="#i-mark" /></svg>Agent</h2>
+          <div class="inline">
+            <button type="button" class="icon-btn" id="agentActivityHistory" aria-label="查看 Agent 记录" title="查看 Agent 记录">
+              <svg aria-hidden="true"><use href="#i-clock" /></svg>
+            </button>
+            <button type="button" class="icon-btn" id="agentActivityMinimize" aria-label="收起 Agent 浮窗" title="收起 Agent 浮窗">
+              <svg aria-hidden="true"><use href="#i-minus" /></svg>
+            </button>
+          </div>
+        </header>
+        <div class="agent-activity-body">
+          <div class="agent-activity-stage">
+            <span class="spinner" id="agentActivitySpinner" aria-hidden="true" hidden></span>
+            <strong id="agentActivityStatus" role="status"></strong>
+          </div>
+          <p class="agent-activity-description" id="agentActivityDescription"></p>
+          <p class="agent-activity-request" id="agentActivityRequest"></p>
+        </div>
+        <footer class="agent-activity-actions">
+          <button type="button" class="btn" data-agent-action="stop">停止</button>
+          <button type="button" class="btn primary" id="agentActivityReview" data-agent-action="review" hidden>确认方案</button>
+        </footer>
+      </section>
     </div>
     <input
       type="file"

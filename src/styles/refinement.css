@@ -24,8 +24,8 @@ main {
   margin-inline: auto;
 }
 .topbar {
-  height: 56px;
-  min-height: 56px;
+  height: 52px;
+  min-height: 52px;
   padding: 0;
   align-items: center;
   flex-wrap: nowrap;
@@ -191,6 +191,7 @@ main {
 }
 #selectionToggle::after,
 #queueBtn::after,
+#agentActivityBtn::after,
 #newBtn::after {
   left: auto;
   right: 0;
@@ -240,13 +241,14 @@ main {
   min-width: 0;
 }
 .gallery-head {
-  gap: 16px;
+  gap: 8px 16px;
+  margin-bottom: 12px;
 }
 .workspace-tools {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .workspace-tools > .inline {
   flex: 0 1 auto;
@@ -636,7 +638,6 @@ dialog[open]::backdrop {
   }
   .workspace-tools {
     gap: 6px;
-    margin-bottom: 12px;
   }
   .workspace-tools .picker-button {
     max-width: 110px;
@@ -721,8 +722,16 @@ dialog[open]::backdrop {
     margin-left: 0;
   }
   .top-actions .quota-trigger {
+    flex: 0 1 auto;
+    min-width: 0;
     max-width: 100px;
-    padding-left: 2px;
+    padding-inline: 2px;
+  }
+  .top-actions #quotaButtonLabel {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .gallery-title {
     flex-wrap: wrap;
@@ -739,6 +748,14 @@ dialog[open]::backdrop {
   #projectsBtn::after {
     left: 0;
     translate: 0;
+  }
+}
+@media (max-width: 380px) {
+  .top-actions {
+    gap: 2px;
+  }
+  .connection-drop-zone {
+    min-width: 54px;
   }
 }
 @media (max-height: 600px) {

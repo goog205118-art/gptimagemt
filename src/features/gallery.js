@@ -102,8 +102,8 @@ function render() {
   const all = state.tasks.filter(existing),
     running = all.filter((t) => t.status === 'running').length,
     waiting = all.filter((t) => ['queued', 'retry_wait'].includes(t.status)).length;
-  $('welcome').hidden = all.length > 0 || state.agentRuns.some((run) => !run.dismissed);
-  $('galleryHead').hidden = !all.length && !state.agentRuns.some((run) => !run.dismissed);
+  $('welcome').hidden = all.length > 0;
+  $('galleryHead').hidden = !all.length;
   $('queueSummary').textContent =
     running || waiting
       ? `${running} 张生成中 · ${waiting} 张等待${state.queuePaused ? ' · 队列已暂停' : ''}`
