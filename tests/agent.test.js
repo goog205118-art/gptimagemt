@@ -31,7 +31,8 @@ const context = {
     { id: 'gpt-image-2', sizes: ['1024x1024'], qualities: ['medium'], maxPrompt: 32000 },
   ],
   maxRequests: 3,
-  questionsRemaining: 2,
+  clarificationPreference: 'ask',
+  clarificationRounds: 0,
 };
 const plan = {
   decision: 'ready',
@@ -102,14 +103,20 @@ test('structured plan preserves every reference and rejects invented models, exc
   );
   assert.throws(() => normalizePlan({ ...plan, size: 'auto' }, { ...context, hasMask: true }));
 });
-test('questions are bounded and incomplete or refused Responses never become a ready plan', () => {
+test('questions are bounded per round, never by round count; incomplete or refused Responses never become ready', () => {
   const question = {
     decision: 'clarify',
     summary: '需要用途',
     questions: [{ title: '用于哪里？', options: ['封面', '详情页'] }],
   };
   assert.equal(normalizePlan(question, context).questions[0].id, 'q1');
-  assert.throws(() => normalizePlan(question, { ...context, questionsRemaining: 0 }));
+  for (const preference of ['ask', 'draft']) {
+    assert.equal(normalizePlan(question, { ...context, clarificationPreference: preference, clarificationRounds: 12 }).decision, 'clarify');
+  }
+  assert.equal(normalizePlan(question, { ...context, questionsRemaining: 0 }).decision, 'clarify');
+  assert.throws(() => normalizePlan({ ...question, questions: [] }, context));
+  assert.throws(() => normalizePlan({ ...question, questions: Array(4).fill(question.questions[0]) }, context));
+  assert.throws(() => normalizePlan({ ...question, questions: [{ title: '', options: [] }] }, context));
   assert.deepEqual(
     extractPlanOutput({
       status: 'completed',
@@ -263,6 +270,21 @@ test('proxy validates the plan structure before returning it to the browser', as
   globalThis.fetch = async () => Response.json({ status: 'completed', output_text: JSON.stringify({ ...plan, count: 99 }) });
   const response = await post({ action: 'plan', origin: 'https://api.openlux.ai', context });
   assert.equal(response.status, 502);
+});
+
+test('proxy keeps essential clarification available after draft choice and after more than two rounds', async () => {
+  const question = { decision: 'clarify', summary: '需要明确底图，不能代选。', questions: [{ title: '请选择底图', options: ['图一', '图二'] }] };
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return Response.json({ status: 'completed', output_text: JSON.stringify(question) });
+  };
+  for (const preference of ['ask', 'draft']) {
+    const response = await post({ action: 'plan', origin: 'https://api.openlux.ai', context: { ...context, clarificationRounds: 5, clarificationPreference: preference } });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).plan.decision, 'clarify');
+  }
+  assert.equal(calls, 2, 'no retries or automatic follow-up requests');
 });
 
 test('variant prompt writer uses a separate schema and returns only selected complete prompts', async () => {

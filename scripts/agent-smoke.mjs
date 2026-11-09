@@ -12,7 +12,7 @@ const page = await context.newPage();
 page.setDefaultTimeout(10000);
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
-let imageCalls = 0, providerAttempts = 0, mode = 'normal', lastContext, lastVariantContext, image, compileCalls = 0;
+let imageCalls = 0, providerAttempts = 0, mode = 'normal', lastContext, lastVariantContext, image, compileCalls = 0, planCalls = 0;
 const sentPrompts = [];
 await page.route('**/*', async (route) => {
   const request = route.request(), url = new URL(request.url());
@@ -28,7 +28,17 @@ await page.route('**/*', async (route) => {
     }
     lastContext = body.context;
     if (body.action !== 'plan') return route.fulfill({ json: { visible: true } });
+    planCalls++;
     const c = body.context;
+    if (mode === 'clarify-essential' || (mode === 'clarify-repeat' && c.clarificationPreference !== 'draft')) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const round = (c.clarificationRounds || 0) + 1;
+      return route.fulfill({ json: { plan: { decision: 'clarify', summary: mode === 'clarify-essential' ? '底图和保留范围尚有冲突，需要你确认，不能跳过。' : '请根据当前产品，选择希望继续比较的细节。', questions: [
+        { title: `第 ${round} 轮：产品、Logo 和英文排版保持一致，这一轮希望如何调整背景的质感？`, options: ['浅灰纯色背景', '温暖细腻的纸面质感', '柔和的冷色渐变'] },
+        { title: `第 ${round} 轮：画面的光线氛围更接近哪一种？`, options: ['柔和侧光', '正面漫射光'] },
+        { title: `第 ${round} 轮：请补充主体和需要保留的范围`, options: [] },
+      ] } } });
+    }
     if (mode === 'interaction' && !c.answers.length) return route.fulfill({ json: { plan: { decision: 'clarify', summary: '先确认适合产品广告的变化方向。', questions: [{ title: '产品、Logo 和英文排版保持一致，想先比较哪类变化？', options: ['背景质感', '光线氛围', '构图留白'] }] } } });
     const roles = c.references.map((ref) => {
       const locked = c.requirements.references.find((item) => item.id === ref.id);
@@ -404,6 +414,7 @@ try {
   await page.locator('#agentExecute').click();
   await page.locator('#agentActivityReview').click();
   assert.equal(lastContext.answers[0].answer, '背景质感');
+  assert.equal((await saved()).agentRuns[0].requireManualReview, true);
   await page.locator('#agentPlanStyleNotes').fill('背景改为更有质感的灰色，产品和英文排版保持一致');
   await page.locator('#agentReviseVariants').click();
   await page.locator('#agentPlanDlg').waitFor({ state: 'visible' });
@@ -470,9 +481,121 @@ try {
   state = await waitSaved((s) => !s.tasks[0].agentRunId && s.tasks[0].status === 'failed');
   assert.match(state.tasks[0].error, /整批/);
   assert.equal(imageCalls, beforeManual + 1);
+  // Clarification is a user choice: no round cap, no implicit image permission.
+  const beforeQuestions = imageCalls;
+  await startFromVersion('请帮我比较这个产品的呈现效果', 'clarify-repeat');
+  for (let round = 1; round <= 3; round++) {
+    for (let i = 0; i < 3; i++) await page.locator(`#agentQuestions [data-answer="${i}"]`).fill(`第 ${round} 轮回答 ${i + 1}`);
+    const beforePlan = planCalls;
+    await page.locator('#agentExecute').evaluate((button) => { button.click(); button.click(); });
+    state = await waitSaved((s) => s.agentRuns[0]?.status === 'questions' && s.agentRuns[0].rounds === round && s.agentRuns[0].planningUsage?.length === round + 1);
+    assert.equal(planCalls, beforePlan + 1);
+    assert.equal(state.agentRuns[0].answers.length, round * 3);
+    await page.locator('#agentActivityReview').click();
+  }
+  assert.match(await page.locator('#agentQuestionHelp').innerText(), /第 4 轮.*无固定轮数上限/);
+  assert.equal(lastContext.clarificationRounds, 3);
+  assert.equal(lastContext.clarificationPreference, 'ask');
+  assert.equal(Object.hasOwn(lastContext, 'questionsRemaining'), false);
+  await page.locator('#agentQuestions [data-answer="0"]').fill('只填写这一项，也希望先看方案');
+  const beforeInvalidAnswer = planCalls;
+  await page.locator('#agentExecute').click();
+  assert.match(await page.locator('#agentPlanError').innerText(), /按已有信息整理方案/);
+  assert.equal(planCalls, beforeInvalidAnswer);
+  await waitSaved((s) => s.agentRuns[0]?.pendingAnswers?.[0]?.includes('只填写'));
+  await page.reload(); await page.waitForLoadState('networkidle');
+  await page.locator('#agentActivityBtn').click();
+  await page.locator('#agentActivityReview').click();
+  assert.match(await page.locator('#agentQuestions [data-answer="0"]').inputValue(), /只填写/);
+  assert.equal(imageCalls, beforeQuestions);
+  for (const [width, height] of [[1440, 900], [1024, 768], [768, 1024], [390, 844], [320, 568], [812, 375]]) {
+    await page.setViewportSize({ width, height });
+    await page.screenshot({ path: `${out}/clarification-${width}.png` });
+    const actual = await page.evaluate(() => {
+      const dlg = document.getElementById('agentPlanDlg');
+      return { overflow: document.documentElement.scrollWidth > innerWidth + 1, dialogOverflow: dlg.scrollWidth > dlg.clientWidth + 1,
+        actionsVisible: ['agentImportPlan', 'agentDraftPlan', 'agentExecute'].every((id) => { const rect = document.getElementById(id).getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight + 1 && rect.right <= innerWidth + 1; }) };
+    });
+    assert.equal(actual.overflow, false, `question page overflow at ${width}`);
+    assert.equal(actual.dialogOverflow, false, `question dialog overflow at ${width}`);
+    assert.equal(actual.actionsVisible, true, `question choices out of view at ${width}`);
+    checks.push({ surface: 'clarification', width, height, ...actual });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // Re-enable automatic mode after refresh: draft still must wait for manual review.
+  await page.locator('[data-close="agentPlanDlg"]').click();
+  await page.locator('#agentModeBtn').click();
+  await page.locator('#agentSettingsBtn').click();
+  await page.locator('#agentAutomatic').check();
+  await page.locator('#agentSettingsForm').evaluate((form) => form.requestSubmit());
+  await page.locator('#agentActivityReview').click();
+  const beforeDraft = planCalls;
+  await page.locator('#agentDraftPlan').evaluate((button) => { button.click(); button.click(); });
+  state = await waitSaved((s) => s.agentRuns[0]?.status === 'review' && s.agentRuns[0].rounds === 4);
+  assert.equal(planCalls, beforeDraft + 1);
+  assert.equal(lastContext.clarificationPreference, 'draft');
+  assert.equal(lastContext.answers.length, 10);
+  assert.match(lastContext.answers.at(-1).answer, /只填写/);
+  assert.equal(state.agentRuns[0].requireManualReview, true);
+  assert.equal(state.agentRuns[0].requests, 0);
+  assert.equal(imageCalls, beforeQuestions);
+  await page.locator('#agentActivityReview').click();
+  assert.equal(await page.locator('#agentDraftPlan').isVisible(), false);
+  assert.match(await page.locator('#agentPlanKnownRequirements').innerText(), /10 条回答.*确认后才会生图/);
+  await page.locator('[data-close="agentPlanDlg"]').click();
+  await page.locator('#agentActivity [data-agent-action="stop"]').click();
+  // An essential question may remain after draft; it must not become a failed or paid run.
+  await startFromVersion('调整这个产品的局部内容，范围由我确认', 'clarify-essential');
+  await page.locator('#agentDraftPlan').click();
+  state = await waitSaved((s) => s.agentRuns[0]?.status === 'questions' && s.agentRuns[0].rounds === 1 && s.agentRuns[0].planningUsage?.length === 2);
+  assert.equal(state.agentRuns[0].answers.length, 0);
+  assert.equal(imageCalls, beforeQuestions);
+  await page.locator('#agentActivityReview').click();
+  assert.match(await page.locator('#agentPlanSummary').innerText(), /冲突.*不能跳过/);
+  for (let i = 0; i < 3; i++) await page.locator(`#agentQuestions [data-answer="${i}"]`).fill(`需要保留的回答 ${i + 1}`);
+  await page.locator('#agentExecute').click();
+  state = await waitSaved((s) => s.agentRuns[0]?.status === 'questions' && s.agentRuns[0].rounds === 2 && s.agentRuns[0].planningUsage?.length === 3);
+  assert.equal(lastContext.clarificationPreference, 'ask');
+  await page.locator('#agentActivityReview').click();
+  await page.locator('#agentQuestions [data-answer="0"]').fill('尚未提交的自定义偏好');
+  await waitSaved((s) => s.agentRuns[0]?.pendingAnswers?.[0] === '尚未提交的自定义偏好');
+  await page.locator('#agentImportPlan').click();
+  const manualPrompt = await page.locator('#prompt').inputValue();
+  assert.ok(manualPrompt.includes('调整这个产品的局部内容'));
+  assert.ok(manualPrompt.includes('需要保留的回答 3'));
+  assert.ok(manualPrompt.includes('尚未提交的自定义偏好'));
+  assert.equal(await page.locator('#constraints').inputValue(), 'Logo 保持原样');
+  assert.equal(await page.locator('#exactText').inputValue(), 'Soap Kit.');
+  assert.equal(imageCalls, beforeQuestions);
+  // Emulate a saved failure from the old two-round cap, retaining real Blob references.
+  const legacyRunId = state.agentRuns[0].id;
+  await waitSaved((s) => s.draft?.prompt?.includes('尚未提交的自定义偏好'));
+  await page.goto('http://127.0.0.1:4173/fixture-seed');
+  await page.evaluate(async (id) => {
+    const db = await new Promise((resolve) => { const r = indexedDB.open('openlux-studio', 1); r.onsuccess = () => resolve(r.result); });
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('state', 'readwrite'), store = tx.objectStore('state'), r = store.get('history');
+      r.onsuccess = () => { const data = r.result, run = data.agentRuns.find((run) => run.id === id); run.status = 'failed'; run.error = '已达到补问上限，请导入需求后手动编辑。'; store.put(data, 'history'); };
+      tx.oncomplete = resolve; tx.onerror = reject;
+    }); db.close();
+  }, legacyRunId);
+  await page.goto('http://127.0.0.1:4173'); await page.waitForLoadState('networkidle');
+  await page.locator('#agentActivityBtn').click();
+  if (!(await page.locator('#agentHistoryDlg').isVisible())) await page.locator('#agentActivityHistory').click();
+  mode = 'clarify-repeat';
+  await page.locator(`#agentHistoryList [data-agent-run="${legacyRunId}"] [data-agent-action="replan"]`).click();
+  state = await waitSaved((s) => s.agentRuns[0]?.previousRunId === legacyRunId && s.agentRuns[0].status === 'questions');
+  assert.equal(lastContext.clarificationRounds, 2);
+  assert.equal(lastContext.answers.length, 4);
+  assert.equal(lastContext.answers.at(-1).answer, '尚未提交的自定义偏好');
+  assert.equal(state.agentRuns[0].requireManualReview, true);
+  assert.equal(imageCalls, beforeQuestions);
   assert.equal(errors.length, 0, errors.join('\n'));
-  await writeFile(`${out}/report.json`, JSON.stringify({ imageCalls, compileCalls, errors, checks, passed: ['version lineage', 'fixed approval', 'single double-click submission', 'intent conflict gate', 'confirmation invalidation', 'retained form', 'stable gallery layout', 'keyboard collapse and focus', 'zero-request crop', 'mask workflow', 'responsive dialog', 'outpaint layout and output mismatch', 'high-detail reference planning', '429 shared budget', 'explicit rejection fallback', 'ambiguous 503 no retry', 'network failure and refresh', 'legacy backup import and continuation', 'isolated variant prompts', 'preview matches actual requests', 'screenshot batch instruction blocked', 'manual import keeps one image per variant', 'content-aware recommendations require selection', 'one selected suggestion produces one image', 'mask and outpaint preview matches request', 'automatic mode waits for variant selection', 'style clarification and follow-up feedback', 'independent AI prompt writing before images', 'source edits invalidate old prompts', 'unsafe compilation fails closed', 'compiler network failure does not generate', 'double click compiles once', 'edited final prompt is validated', 'complete manual mode preserves exact copy', 'last-mile constraints validation'] }, null, 2));
-  console.log('Browser integration passed, including isolated variant prompts and request transparency; all provider responses mocked.');
+  await writeFile(`${out}/report.json`, JSON.stringify({ imageCalls, compileCalls, planCalls, errors, checks, passed: [
+    'version lineage', 'fixed approval', 'single double-click submission', 'intent conflict gate', 'confirmation invalidation', 'retained form', 'stable gallery layout', 'keyboard collapse and focus', 'zero-request crop', 'mask workflow', 'responsive dialog', 'outpaint layout and output mismatch', 'high-detail reference planning', '429 shared budget', 'explicit rejection fallback', 'ambiguous 503 no retry', 'network failure and refresh', 'legacy backup import and continuation', 'isolated variant prompts', 'preview matches actual requests', 'screenshot batch instruction blocked', 'manual import keeps one image per variant', 'content-aware recommendations require selection', 'one selected suggestion produces one image', 'mask and outpaint preview matches request', 'automatic mode waits for variant selection', 'style clarification and follow-up feedback', 'independent AI prompt writing before images', 'source edits invalidate old prompts', 'unsafe compilation fails closed', 'compiler network failure does not generate', 'double click compiles once', 'edited final prompt is validated', 'complete manual mode preserves exact copy', 'last-mile constraints validation',
+    'user-driven clarification beyond two rounds', 'double click plans once', 'partial answers draft requires manual review', 'essential clarification remains available after draft', 'partial answers survive refresh', 'manual editing retains submitted and pending answers', 'old clarification-limit failure recovery', 'responsive clarification choices',
+  ] }, null, 2));
+  console.log('Browser integration passed, including user-controlled clarification and independent variants; all provider responses mocked.');
 } catch (error) {
   await page.screenshot({ path: `${out}/failure.png` });
   console.error('Browser state:', await page.locator('body').innerText(), errors);

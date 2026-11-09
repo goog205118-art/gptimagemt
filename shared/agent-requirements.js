@@ -119,7 +119,7 @@ export function confirmedRequirements(run, plan) {
 }
 
 export function automaticEligible(run, plan, price, options) {
-  return !!options.automatic && !!options.previouslyConfirmed && !run.requirements?.legacy && !run.requirements?.requiresReview &&
+  return !!options.automatic && !!options.previouslyConfirmed && !run.requireManualReview && !run.requirements?.legacy && !run.requirements?.requiresReview &&
     !run.planConflicts?.length && !requirementConflicts(plan, run.requirements).length &&
     !executionIssues(plan, run.snapshot).length && run.costLimit !== null && price !== null &&
     plan.count * price <= run.costLimit && !['crop', 'local', 'outpaint'].includes(plan.operation) &&

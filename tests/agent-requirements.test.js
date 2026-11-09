@@ -68,6 +68,7 @@ test('E04 automatic mode pauses for conflicts, missing masks, legacy records, ch
   assert.equal(automaticEligible(run, plan, 0.2, options), false);
   assert.equal(automaticEligible({ ...run, planConflicts: [{}] }, plan, 0.1, options), false);
   assert.equal(automaticEligible({ ...run, requirements: { ...run.requirements, legacy: true } }, plan, 0.1, options), false);
+  assert.equal(automaticEligible({ ...run, requireManualReview: true }, plan, 0.1, options), false);
 });
 test('A06/A08 refresh and import never resume paid requests and preserve successful versions', () => {
   const tasks = [{ id: 'success', agentRunId: 'run', status: 'success' }, { id: 'queued', agentRunId: 'run', status: 'queued' }];

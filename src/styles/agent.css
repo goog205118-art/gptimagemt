@@ -413,6 +413,7 @@
   .agent-activity.is-open { transform: none; }
   .agent-dialog .dialog-actions { flex-wrap: wrap; }
   .agent-dialog .dialog-actions .btn { min-height: 44px; white-space: normal; }
+  #agentPlanDlg .dialog-actions .btn { flex: 1 1 auto; }
   .agent-candidates {
     grid-template-columns: minmax(0, 1fr);
   }

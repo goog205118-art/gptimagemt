@@ -1341,6 +1341,7 @@
           <p id="agentPlanSummary" class="agent-help"></p>
           <p id="agentPlanKnownRequirements" class="agent-help" hidden></p>
           <div id="agentQuestions" class="agent-questions"></div>
+          <p id="agentQuestionHelp" class="agent-help" hidden></p>
           <div id="agentPlanFields">
             <div id="agentPlanBasePreview" class="agent-base-preview"></div>
             <section id="agentPlanVariation" hidden>
@@ -1400,8 +1401,9 @@
           <p id="agentPlanError" class="agent-feedback error" role="alert"></p>
         </div>
         <div class="dialog-actions">
-          <button type="button" class="btn" id="agentImportPlan">转到输入框编辑</button
-          ><button type="submit" class="btn primary" id="agentExecute">确认并生成</button>
+          <button type="button" class="btn" id="agentImportPlan">转到输入框编辑</button>
+          <button type="button" class="btn outlined" id="agentDraftPlan" hidden>按已有信息整理方案</button>
+          <button type="submit" class="btn primary" id="agentExecute">确认并生成</button>
         </div>
       </form>
     </dialog>

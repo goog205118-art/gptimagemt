@@ -282,7 +282,8 @@ async function planRun(run) {
       })),
       availableModels: availableModels(ids, run.snapshot),
       maxRequests: run.maxRequests,
-      questionsRemaining: Math.max(0, 2 - run.rounds),
+      clarificationPreference: run.clarificationPreference || 'ask',
+      clarificationRounds: run.rounds || 0,
       answers: run.answers,
       variationFeedback: run.variationFeedback || '',
       priorPlan: run.variationFeedback ? run.plan : undefined,
@@ -327,7 +328,7 @@ async function planRun(run) {
     if (run.status === 'review' && run.plan.variantPromptMode !== 'brief') planTask(run, run.plan);
     if (state.base !== imageBase || state.key !== imageKey)
       throw new Error('生图连接已变化，方案已停止，请重新规划。');
-    if (run.status === 'review' && options().automatic) {
+    if (run.status === 'review' && !run.requireManualReview && options().automatic) {
       try {
         await execute(run, run.plan, true);
         return;
@@ -416,6 +417,26 @@ function questionFields(run) {
     <label class="agent-free-answer">补充说明或直接填写<input type="text" data-answer="${i}" maxlength="1200" value="${escapeHTML(run.pendingAnswers?.[i] || '')}" placeholder="填写你的想法…"></label></fieldset>`,
     )
     .join('');
+}
+function pendingQuestionAnswers(run) {
+  return (run.plan?.decision === 'clarify' ? run.plan.questions : []).map((q, i) => ({
+    question: q.title,
+    answer: (run.pendingAnswers?.[i] || '').trim(),
+  }));
+}
+async function continueQuestions(run, preference) {
+  if (run.status !== 'questions' || planners.has(run.id)) return;
+  const answers = pendingQuestionAnswers(run);
+  if (preference === 'ask' && answers.some((a) => !a.answer))
+    throw new Error('请补充每个问题，或选择「按已有信息整理方案」跳过未答项。');
+  run.answers.push(...answers.filter((a) => a.answer));
+  run.rounds = (run.rounds || 0) + 1;
+  run.clarificationPreference = preference;
+  // Continuing the discussion is not authorization to send image requests.
+  run.requireManualReview = true;
+  run.pendingAnswers = [];
+  $('agentPlanDlg').close();
+  await planRun(run);
 }
 function fillPlanOptions(plan, run) {
   const profile = run.context.availableModels.find((m) => m.id === plan.model);
@@ -683,8 +704,11 @@ function openPlan(run) {
   $('agentQuestions').hidden = !questioning;
   $('agentQuestions').innerHTML = questioning ? questionFields(run) : '';
   $('agentImportPlan').hidden = false;
-  $('agentPlanKnownRequirements').hidden = !questioning;
-  $('agentPlanKnownRequirements').textContent = questioning ? `当前已记录：${run.requirements?.values.constraints || '保留项待补充'}。${run.snapshot.refs.length} 张参考 · ${run.snapshot.settings.size}。可在回答中说明新的范围或规格，或转到输入框调整。` : '';
+  $('agentDraftPlan').hidden = !questioning;
+  $('agentQuestionHelp').hidden = !questioning;
+  $('agentQuestionHelp').textContent = questioning ? `当前是第 ${(run.rounds || 0) + 1} 轮补问，无固定轮数上限。你可以继续回答，也可跳过未答项先整理方案；底图、保留项和操作范围有冲突时仍需确认。继续规划只产生文本用量，生图前可查看方案。` : '';
+  $('agentPlanKnownRequirements').hidden = !questioning && !run.requireManualReview;
+  $('agentPlanKnownRequirements').textContent = questioning ? `当前已记录：${run.requirements?.values.constraints || '保留项待补充'}。${run.snapshot.refs.length} 张参考 · ${run.snapshot.settings.size}。可在回答中说明新的范围或规格，或转到输入框调整。` : run.requireManualReview ? `已保留需求和 ${run.answers.length} 条回答。本轮方案需你确认后才会生图。` : '';
   $('agentExecute').textContent = questioning ? '补充并继续规划' : '确认并生成';
   $('agentExecute').disabled = false;
   if (!questioning) {
@@ -813,7 +837,7 @@ function renderAgentActivity() {
   review.textContent = run.status === 'questions' ? '补充需求' : '确认方案';
   const description = {
     planning: '正在结合内容和你的回答，讨论创作方向。',
-    questions: '补充几个关键点后，Agent 会继续规划。',
+    questions: '由你选择：继续回答、按已有信息整理方案，或转到输入框编辑。',
     review: run.variantWriting ? '正在将所选细节编写成每张完整提示词；尚未生图。' : run.plan?.summary || '方案已准备好，请确认后开始生成。',
     running: `${gptModelLabel(run.plan?.model || run.snapshot.settings.model)} · ${run.requests || 0}/${run.maxRequests} 次生图请求`,
     queued: '方案已确认，等待队列提交。',
@@ -887,7 +911,7 @@ function renderAgentHistory() {
     ${inProgress(run) || run.status === 'unknown' ? '<button class="btn" data-agent-action="open">打开此会话</button>' : ''}
     ${run.status !== 'planning' ? '<button class="btn" data-agent-action="import">导入输入框</button>' : ''}
     ${run.resultIds?.length ? '<button class="btn" data-agent-action="result">查看作品 / 从本版继续</button>' : ''}
-    ${run.status === 'failed' ? '<button class="btn" data-agent-action="replan">手动重新规划</button>' : ''}</div></div>
+    ${run.status === 'failed' ? '<button class="btn" data-agent-action="replan">保留回答重新规划</button>' : ''}</div></div>
     <details class="agent-execution" ${expanded.has(run.id) ? 'open' : ''}><summary>方案与执行记录</summary><p>${escapeHTML(run.request)}</p><p>${escapeHTML(run.error || run.plan?.summary || '')}</p><p>规划模型：${escapeHTML(run.plannerModel || getAgentConnection().model)} · 方向规划 ${(run.planningUsage || []).filter((item) => item.phase !== 'variants').length} 次 · 独立提示词编写 ${(run.planningUsage || []).filter((item) => item.phase === 'variants').length} 次</p>${run.variantStyleNotes ? `<p>变体偏好：${escapeHTML(run.variantStyleNotes)}</p>` : ''}${run.answers.map((item) => `<p>${escapeHTML(item.question)}：${escapeHTML(item.answer)}</p>`).join('')}
     ${run.plan?.decision === 'ready' ? `<p>${escapeHTML(run.plan.model)} · ${escapeHTML(run.plan.size)} · ${escapeHTML(run.plan.quality)} · ${run.plan.count} 张</p><p>${escapeHTML(run.plan.prompt)}</p>${run.plan.variants?.length ? `<p>变化维度：${escapeHTML(run.plan.variantAxis)}</p>` + run.plan.variants.map((v) => `<p>${escapeHTML(v.label)}：${escapeHTML(v.prompt)}</p>`).join('') : ''}` : ''}
     <ol>${(run.requestLog || []).map((item) => `<li>${item.variantLabel ? escapeHTML(item.variantLabel) + ' · ' : ''}${escapeHTML(item.model)} · ${escapeHTML({ success: '成功', failed: '失败', unknown: '结果待核实', limited: '限流', unavailable: '不可用，切换候选' }[item.outcome] || '已提交')} · ${item.estimate == null ? '无价格估算' : '预留估算 ' + money(item.estimate, run.currency)}${item.request ? `<details><summary>实际请求 · ${escapeHTML(item.request.path)} · n=${item.request.n}</summary><p>任务：${escapeHTML(item.taskId)} · 方案版本 ${item.planRevision || 1} · 参考 ID：${escapeHTML(item.request.refIds.join('、') || '无')}</p><p class="agent-request-prompt">${escapeHTML(item.prompt || '')}</p></details>` : ''}</li>`).join('')}</ol></details></article>`,
@@ -1061,7 +1085,8 @@ export function mountAgent() {
           availableModels: availableModels(modelInventory(), { ...snapshot, refs: [] }),
           hasMask: false,
           maxRequests: 1,
-          questionsRemaining: 0,
+          clarificationPreference: 'draft',
+          clarificationRounds: 0,
           answers: [],
         };
         if (!context.availableModels.length) throw new Error('请先读取生图模型清单。');
@@ -1110,7 +1135,11 @@ export function mountAgent() {
       const next = {
         id: uid(), schemaVersion: SESSION_VERSION, previousRunId: run.id,
         snapshot: structuredClone(run.snapshot), requirements: structuredClone(run.requirements),
-        request: run.request, createdAt: Date.now(), rounds: 0, answers: [],
+        request: run.request, createdAt: Date.now(), rounds: run.rounds || 0,
+        answers: structuredClone([...(run.answers || []), ...pendingQuestionAnswers(run).filter((a) => a.answer)]),
+        clarificationPreference: run.clarificationPreference || 'ask', requireManualReview: true,
+        variationFeedback: run.variationFeedback || '',
+        detailReferences: structuredClone(run.detailReferences || []),
         maxRequests: run.maxRequests, costLimit: run.costLimit, currency: run.currency,
         allowedCandidates: [...(run.allowedCandidates || [])], requests: 0, usedEstimate: 0, requestLog: [],
       };
@@ -1241,16 +1270,7 @@ export function mountAgent() {
     $('agentPlanError').textContent = '';
     try {
       if (run.status === 'questions') {
-        const answers = run.plan.questions.map((q, i) => ({
-          question: q.title,
-          answer: $('agentQuestions').querySelector(`[data-answer="${i}"]`).value.trim(),
-        }));
-        if (answers.some((a) => !a.answer)) throw new Error('请补充每个问题，或填写你的想法。');
-        run.answers.push(...answers);
-        run.rounds++;
-        run.pendingAnswers = [];
-        $('agentPlanDlg').close();
-        await planRun(run);
+        await continueQuestions(run, 'ask');
       } else {
         const plan = formPlan(run);
         if (plan.variants.length && !compilationCurrent(run, plan)) {
@@ -1270,6 +1290,15 @@ export function mountAgent() {
       $('agentExecute').disabled = false;
       if (run.status === 'review') updatePlanEstimate();
     }
+  };
+  $('agentDraftPlan').onclick = async () => {
+    const run = runById(editingRunId);
+    if (run?.status !== 'questions') return;
+    $('agentDraftPlan').disabled = $('agentExecute').disabled = true;
+    $('agentPlanError').textContent = '';
+    try { await continueQuestions(run, 'draft'); }
+    catch (e) { if (editingRunId === run.id) $('agentPlanError').textContent = e.message; }
+    finally { $('agentDraftPlan').disabled = $('agentExecute').disabled = false; }
   };
   $('agentImportPlan').onclick = () => {
     const run = runById(editingRunId);
@@ -1306,6 +1335,9 @@ function importRun(run) {
   draft.variantAxis = '';
   draft.variants = '';
   draft.variantPromptMode = 'delta';
+  const answers = [...(run.answers || []), ...pendingQuestionAnswers(run).filter((a) => a.answer)];
+  const discussion = answers.map((a) => `${a.question}\n${a.answer}`).join('\n\n');
+  draft.prompt = [run.request || draft.prompt, discussion && `已补充的需求：\n${discussion}`, run.variationFeedback].filter(Boolean).join('\n\n');
   if (run.plan?.decision === 'ready') {
     let plan;
     try { plan = normalizePlan(executablePlan(run, run.plan), run.context); }
