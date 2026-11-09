@@ -258,6 +258,17 @@ test('model visibility is read-only; proxy rejects arbitrary hosts, cross-site c
     assert.ok((await post(body, headers)).status >= 400);
   assert.equal(calls, 1);
 });
+test('proxy validates the plan structure before returning it to the browser', async () => {
+  globalThis.fetch = async () => Response.json({ status: 'completed', output_text: JSON.stringify({ ...plan, count: 99 }) });
+  const response = await post({ action: 'plan', origin: 'https://api.openlux.ai', context });
+  assert.equal(response.status, 502);
+});
+test('only linked detail previews use high detail, originals retain low-detail previews', () => {
+  const preview = 'data:image/jpeg;base64,YQ==';
+  const body = buildPlannerBody({ context: { ...context, detailReferences: [{ id: 'detail', parentId: 'ref1', imageNumber: 2 }] }, previews: [preview, preview] });
+  assert.equal(body.input[0].content[1].detail, 'low');
+  assert.equal(body.input[0].content[2].detail, 'high');
+});
 test('upstream errors cannot echo authentication secrets and do not retry', async () => {
   let calls = 0;
   globalThis.fetch = async () => {

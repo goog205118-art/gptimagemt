@@ -22,6 +22,7 @@ function pruneURLs() {
     ...state.tasks.flatMap((t) => t.refs || []),
     ...state.presets.flatMap((p) => p.refs || []),
     ...state.assets.flatMap((p) => p.refs || []),
+    ...state.agentRuns.flatMap((run) => run.snapshot?.refs || []),
   ];
   const used = new Set(refs.map((r) => r.id));
   for (const [id, url] of refURLs)

@@ -34,8 +34,9 @@ function newCanvas(w, h) {
   canvas.height = h;
   return canvas;
 }
-async function openEditor(mode = 'mask') {
-  const ref = state.refs[0];
+async function openEditor(mode = 'mask', session = null) {
+  const ref = session?.ref || state.refs[0];
+  const sourceMask = session ? session.mask : state.mask;
   if (!ref) throw new Error('请先添加参考图，或在作品卡片上选择局部修改。');
   const bitmap = await createImageBitmap(ref.blob);
   if (bitmap.width * bitmap.height > 40000000) {
@@ -56,9 +57,10 @@ async function openEditor(mode = 'mask') {
     panY: 0,
     drag: null,
     refId: ref.id,
+    session,
   };
-  if (state.mask?.assetId === ref.id) {
-    const old = await createImageBitmap(state.mask.blob),
+  if (sourceMask?.assetId === ref.id && sourceMask.kind !== 'outpaint') {
+    const old = await createImageBitmap(sourceMask.blob),
       selection = newCanvas(bitmap.width, bitmap.height),
       ctx = selection.getContext('2d');
     ctx.fillStyle = '#fff';
@@ -73,10 +75,17 @@ async function openEditor(mode = 'mask') {
   $('expandScale').value = 1;
   $('eraserBtn').setAttribute('aria-pressed', 'false');
   $('expandAI').checked = true;
-  $('maskKeepOutside').checked = state.mask?.keepOutside !== false;
-  setSelect('maskMode', state.mask?.mode || 'auto');
-  setSelect('outpaintPolicy', state.mask?.outpaintPolicy || 'natural');
-  $('outpaintIntent').value = state.mask?.sceneIntent || '';
+  $('editorRatio').disabled = !!session;
+  $('editorCanvas').tabIndex = 0;
+  $('editorCanvas').setAttribute('aria-label', mode === 'mask' ? '涂抹修改区域画布' : '裁切或扩图预览，方向键调整位置');
+  $('maskKeepOutside').checked = sourceMask?.keepOutside !== false;
+  setSelect('maskMode', sourceMask?.mode || 'auto');
+  setSelect('outpaintPolicy', sourceMask?.outpaintPolicy || 'natural');
+  $('outpaintIntent').value = sourceMask?.sceneIntent || '';
+  if (session?.size) {
+    const [w, h] = session.size.split('x').map(Number);
+    if (w && h) setSelect('editorRatio', `${w}:${h}`);
+  }
   $('outpaintPolicy').dispatchEvent(new Event('change'));
   showDialog('editorDlg');
   setEditorMode(mode);
@@ -89,7 +98,7 @@ function setEditorMode(mode) {
   editor.drawing = false;
   document
     .querySelectorAll('[data-editor-mode]')
-    .forEach((b) => b.classList.toggle('outlined', b.dataset.editorMode === mode));
+    .forEach((b) => { b.classList.toggle('outlined', b.dataset.editorMode === mode); b.disabled = !!editor.session && b.dataset.editorMode !== mode; });
   $('maskTools').hidden = mode !== 'mask';
   $('ratioTools').hidden = mode === 'mask';
   $('outpaintOptions').hidden = mode !== 'expand';
@@ -104,7 +113,7 @@ function setEditorMode(mode) {
         ? '拖动画面调整裁切位置，缩放决定保留范围。本地裁切不调用生图接口。'
         : '拖动选择原图位置。可说明新区域的用途、结构与物件。取消 AI 补全时，只保留透明边缘。';
   $('applyEditor').textContent =
-    mode === 'mask' ? '应用局部编辑' : mode === 'crop' ? '裁切后放入输入框' : '适配后放入输入框';
+    mode === 'mask' ? '应用局部编辑' : mode === 'crop' ? (editor.session ? '确认范围并保存裁切版本' : '裁切后放入输入框') : '确认扩图布局';
   $('downloadLocalEditor').hidden = mode === 'mask';
   renderEditor();
 }
@@ -227,6 +236,7 @@ function finishStroke() {
   renderEditor();
 }
 function ratioOutput() {
+  if (editor.session?.size && editor.session.size !== 'auto') return editor.session.size.split('x').map(Number);
   const [a, b] = $('editorRatio').value.split(':').map(Number);
   if (a === b) return [1024, 1024];
   return a > b ? [1536, Math.round((1536 * b) / a)] : [Math.round((1536 * a) / b), 1536];
@@ -243,8 +253,10 @@ function localEditorCanvas() {
   };
 }
 async function applyEditor() {
-  const ref = state.refs.find((r) => r.id === editor.refId);
-  if (!ref || state.refs[0]?.id !== ref.id)
+  const session = editor.session;
+  const ref = session ? { ...session.ref } : state.refs.find((r) => r.id === editor.refId);
+  let resultMask = null, addition = '', resultSize = null, crop = null;
+  if (!ref || (!session && state.refs[0]?.id !== ref.id))
     throw new Error('当前第一张参考图已变化，请重新打开编辑器。');
   $('applyEditor').disabled = true;
   try {
@@ -258,7 +270,7 @@ async function applyEditor() {
           break;
         }
       if (!painted) {
-        state.mask = null;
+        resultMask = null;
         setStatus('局部编辑区域已清除。');
       } else {
         const source = newCanvas(editor.bitmap.width, editor.bitmap.height);
@@ -275,7 +287,7 @@ async function applyEditor() {
         ref.blob = baseBlob;
         ref.name = safeName(ref.name.replace(/\.[^.]+$/, '')) + '.png';
         ref.role = 'base';
-        state.mask = {
+        resultMask = {
           assetId: ref.id,
           blob: maskBlob,
           width: mask.width,
@@ -286,16 +298,18 @@ async function applyEditor() {
         setStatus('已附加局部编辑区域。填写修改要求后点击生成。');
       }
     } else {
-      const originalSource = state.mask?.originalBlob || editor.source;
+      const originalSource = (session ? session.mask : state.mask)?.originalBlob || editor.source;
       const { canvas, placement } = localEditorCanvas(),
-        blob = await canvasBlob(canvas);
+        blob = await canvasBlob(canvas, editor.mode === 'crop' && session?.format ? `image/${session.format}` : 'image/png');
       ref.blob = blob;
       ref.name =
         (editor.mode === 'crop' ? '裁切-' : '适配-') +
         safeName(ref.name.replace(/\.[^.]+$/, '')) +
-        '.png';
+        (blob.type === 'image/jpeg' ? '.jpg' : blob.type === 'image/webp' ? '.webp' : '.png');
       ref.role = 'base';
-      state.mask = null;
+      resultMask = null;
+      resultSize = canvas.width + 'x' + canvas.height;
+      if (editor.mode === 'crop') crop = { placement, width: canvas.width, height: canvas.height, sourceWidth: editor.bitmap.width, sourceHeight: editor.bitmap.height };
       if (
         editor.mode === 'expand' &&
         $('expandAI').checked &&
@@ -313,7 +327,7 @@ async function applyEditor() {
           Math.min(canvas.width, Math.round(placement.w)),
           Math.min(canvas.height, Math.round(placement.h)),
         );
-        state.mask = {
+        resultMask = {
           assetId: ref.id,
           blob: await canvasBlob(mask),
           width: mask.width,
@@ -331,13 +345,9 @@ async function applyEditor() {
             height: placement.h,
           },
         };
-        const addition =
+        addition =
           '合理拓展原场景：先推断画面外真实空间和物体结构，再补全透视、光线与材质一致的新区域；避免拉伸、复制或刻意延长现有物件。';
-        $('prompt').value = $('prompt').value.trim()
-          ? $('prompt').value.trim() + '\n' + addition
-          : addition;
       }
-      setSelect('size', canvas.width + 'x' + canvas.height);
       setStatus(
         editor.mode === 'crop'
           ? '本地裁切完成，已作为当前底图。'
@@ -345,7 +355,18 @@ async function applyEditor() {
       );
     }
     ref.id = uid();
-    if (state.mask) state.mask.assetId = ref.id;
+    ref.sourceAssetId = editor.refId;
+    ref.userRole = 'base';
+    if (resultMask) resultMask.assetId = ref.id;
+    if (session) {
+      await session.onApply({ ref, mask: resultMask, size: resultSize, addition, crop });
+      $('editorDlg').close();
+      session.onComplete?.();
+      return;
+    }
+    state.mask = resultMask;
+    if (resultSize) setSelect('size', resultSize);
+    if (addition) $('prompt').value = [$('prompt').value.trim(), addition].filter(Boolean).join('\n');
     renderRefs();
     renderEditContext();
     scheduleDraft();
@@ -411,6 +432,14 @@ function mountFeaturesEditor() {
     }
   };
   $('editorCanvas').onpointerup = $('editorCanvas').onpointercancel = finishStroke;
+  $('editorCanvas').onkeydown = (e) => {
+    if (editor.mode === 'mask' || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    e.preventDefault();
+    const step = e.shiftKey ? 0.05 : 0.01;
+    editor.panX += e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+    editor.panY += e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+    renderEditor();
+  };
   $('applyEditor').onclick = guard(applyEditor);
   $('downloadLocalEditor').onclick = guard(async () => {
     const { canvas } = localEditorCanvas();

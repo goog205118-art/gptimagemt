@@ -655,6 +655,7 @@
           </div>
           <p class="agent-activity-description" id="agentActivityDescription"></p>
           <p class="agent-activity-request" id="agentActivityRequest"></p>
+          <div id="agentActivityWork" class="agent-activity-work"></div>
         </div>
         <footer class="agent-activity-actions">
           <button type="button" class="btn" data-agent-action="stop">停止</button>
@@ -1334,10 +1335,16 @@
         </div>
         <div class="preset-dialog-body">
           <p id="agentPlanSummary" class="agent-help"></p>
+          <p id="agentPlanKnownRequirements" class="agent-help" hidden></p>
           <div id="agentQuestions" class="agent-questions"></div>
           <div id="agentPlanFields">
+            <div id="agentPlanBasePreview" class="agent-base-preview"></div>
+            <div class="preset-field-row">
+              <div class="field"><label for="agentPlanOperation">本轮操作</label><select id="agentPlanOperation"><option value="create">新建</option><option value="edit">整图修改</option><option value="local">局部修改</option><option value="crop">本地裁切</option><option value="outpaint">扩图</option></select></div>
+              <div class="field"><label for="agentPlanBase">指定底图</label><select id="agentPlanBase"></select></div>
+            </div>
             <div class="field">
-              <label for="agentPlanPrompt">提示词</label
+              <label for="agentPlanPrompt">本轮改什么 / 创作要求</label
               ><textarea id="agentPlanPrompt" rows="4" maxlength="32000"></textarea>
             </div>
             <div class="field">
@@ -1345,13 +1352,25 @@
               ><textarea id="agentPlanConstraints" rows="2" maxlength="4000"></textarea>
             </div>
             <div class="preset-field-row">
+              <div class="field"><label for="agentPlanSize">交付尺寸</label><select id="agentPlanSize"></select></div>
+              <div class="field"><label for="agentPlanCount">交付张数</label><input id="agentPlanCount" type="number" min="1" max="3" /></div>
+            </div>
+            <div class="preset-field-row">
+              <div class="field"><label for="agentPlanFormat">输出格式</label><select id="agentPlanFormat"><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="webp">WebP</option></select></div>
+              <div class="field"><label for="agentPlanBackground">背景</label><select id="agentPlanBackground"><option value="auto">自动</option><option value="opaque">不透明</option><option value="transparent">透明</option></select></div>
+            </div>
+            <p id="agentPlanEstimate" class="agent-help"></p>
+            <div class="field"><label for="agentPlanExactText">精确文案（逐字保留）</label><textarea id="agentPlanExactText" rows="2" maxlength="4000" placeholder="保留大小写、空格与标点；建议在 PS 等工具中后期排字"></textarea></div>
+            <div id="agentPlanReferences" class="agent-plan-references"></div>
+            <p id="agentPlanIssues" class="agent-feedback"></p>
+            <button type="button" class="btn outlined" id="agentPrepareOperation">设置操作范围</button>
+            <div id="agentPlanDifferences" class="agent-differences"></div>
+            <label class="check" id="agentPlanAcknowledgeLabel"><input type="checkbox" id="agentPlanAcknowledge" /><span>我已核对差异，并以本确认卡的要求为准</span></label>
+            <details class="agent-execution"><summary>模型、质量与执行细节</summary>
+            <div class="preset-field-row">
               <div class="field">
                 <label for="agentPlanModel">生图模型 / 线路</label
                 ><select id="agentPlanModel"></select>
-              </div>
-              <div class="field">
-                <label for="agentPlanSize">尺寸</label
-                ><select id="agentPlanSize"></select>
               </div>
             </div>
             <div class="preset-field-row">
@@ -1359,14 +1378,10 @@
                 <label for="agentPlanQuality">质量</label
                 ><select id="agentPlanQuality"></select>
               </div>
-              <div class="field">
-                <label for="agentPlanCount">张数</label
-                ><input id="agentPlanCount" type="number" min="1" max="3" />
-              </div>
             </div>
-            <p id="agentPlanReferences" class="agent-help"></p>
-            <p id="agentPlanEstimate" class="agent-help"></p>
             <p id="agentPlanFallbacks" class="agent-help"></p>
+            <p id="agentPlanRoute" class="agent-help"></p>
+            </details>
           </div>
           <p id="agentPlanError" class="agent-feedback error" role="alert"></p>
         </div>

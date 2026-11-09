@@ -16,7 +16,6 @@ import { runtime } from '../core/runtime.js';
 import { renderRefs } from './references.js';
 import { money, priceFor } from '../services/pricing.js';
 import { pump } from './jobs.js';
-import { uid } from '../core/utils.js';
 import { getAgentConnection } from '../services/agent.js';
 function syncComposerModes() {
   const agent = state.agentMode;
@@ -243,16 +242,19 @@ async function continueTask(t) {
   state.mask = null;
   state.refs = [
     {
-      id: uid(),
+      id: `version-${t.id}`,
+      versionId: t.id,
       blob,
       name: `底图-${t.id}.${extension(blob)}`,
       role: 'base',
       note: '以此图为基础，保持未指定的部分不变',
+      userRole: 'base',
     },
+    ...(t.confirmedRequirements ? copyRefs(t.refs).filter((ref) => ref.role !== 'base' && ref.id !== t.confirmedRequirements.values?.baseId).map((ref) => ({ ...ref, userRole: ref.role, userNote: ref.note })) : []),
   ];
   applySettings(t.settings);
   $('prompt').value = '';
-  $('constraints').value = '保持主体结构、材质和未指定的内容不变。';
+  $('constraints').value = t.confirmedRequirements?.values?.constraints || t.constraints || '建议保留主体结构、材质和未指定内容，请核对。';
   $('draftProject').value = t.projectId || 'default';
   $('n').value = 1;
   $('variantAxis').value = '';

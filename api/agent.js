@@ -1,5 +1,5 @@
 import { readRequest, providerJSON, sendJSON, failure, RequestError } from '../server/openlux.js';
-import { buildPlannerBody, extractPlanOutput } from '../shared/agent-protocol.js';
+import { buildPlannerBody, extractPlanOutput, normalizePlan } from '../shared/agent-protocol.js';
 
 export default async function agent(request, response) {
   try {
@@ -55,6 +55,7 @@ export default async function agent(request, response) {
     let plan;
     try {
       plan = extractPlanOutput(data);
+      normalizePlan(plan, body.context);
     } catch (e) {
       throw new RequestError(502, e.message);
     }

@@ -33,7 +33,8 @@ export function reserveAgentRequest(task) {
   run.requests++;
   run.usedEstimate += price ?? 0;
   task.agentRequests = (task.agentRequests || 0) + 1;
-  run.requestLog.push({ taskId: task.id, model: id, at: Date.now(), estimate: price ?? null });
+  run.requestLog.push({ taskId: task.id, model: id, at: Date.now(), estimate: price ?? null,
+    operation: task.operation, baseAssetId: task.baseAssetId, parentId: task.parentId, planRevision: task.approval?.revision });
 }
 export function agentCanRetry(task, nextPrice) {
   if (!task.agentRunId) return true;
@@ -118,17 +119,20 @@ export function recordAgentHealth(task, outcome, elapsedMs = 0) {
 }
 export function syncAgentRuns() {
   for (const run of state.agentRuns) {
-    if (run.status !== 'running') continue;
+    if (!['running', 'queued', 'checking'].includes(run.status)) continue;
     const tasks = state.tasks.filter((t) => t.agentRunId === run.id);
     if (tasks.some((t) => ['running', 'queued', 'retry_wait'].includes(t.status))) continue;
     run.status = tasks.some((t) => t.status === 'unknown')
       ? 'unknown'
       : tasks.length && tasks.every((t) => t.status === 'success')
         ? 'success'
+        : tasks.some((t) => t.status === 'success')
+          ? 'partial'
         : run.stopped
           ? 'cancelled'
           : 'failed';
     run.finishedAt = Date.now();
+    run.resultIds = tasks.filter((t) => t.status === 'success').map((t) => t.id);
     if (run.status !== 'success')
       run.error ||= tasks.find((task) => task.error)?.error || '本次方案未全部完成。';
     scopes.delete(run.id);

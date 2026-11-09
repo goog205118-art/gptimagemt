@@ -1,5 +1,5 @@
 import { $, icon } from '../core/dom.js';
-import { state } from '../core/state.js';
+import { state, taskById } from '../core/state.js';
 import { persist, storageSet } from '../core/storage.js';
 import { uid, escapeHTML } from '../core/utils.js';
 import { ROLE_NAMES } from '../core/config.js';
@@ -28,11 +28,20 @@ import {
   focusComposer,
   updateSend,
   setComposerMode,
+  continueTask,
 } from './composer.js';
 import { effectivePrompt, enqueueAgentTasks, cancelTask } from './jobs.js';
 import { render } from './gallery.js';
 import { guard, notify, showDialog, setStatus } from '../ui/dialogs.js';
 import { syncPickers } from '../ui/pickers.js';
+import { referenceURL } from '../core/assets.js';
+import { inspectOutput } from '../core/output-check.js';
+import { openEditor } from './editor.js';
+import { openDetail } from './detail.js';
+import {
+  SESSION_VERSION, OPERATIONS, captureRequirements, requirementConflicts,
+  executionIssues, planSignature, confirmedRequirements, automaticEligible, automationScope,
+} from '../../shared/agent-requirements.js';
 
 const planners = new Map();
 let editingRunId = null,
@@ -41,8 +50,8 @@ let editingRunId = null,
   activityOpen = false;
 const runById = (id) => state.agentRuns.find((run) => run.id === id);
 const needsInput = (run) => ['questions', 'review'].includes(run?.status);
-const inProgress = (run) => ['planning', 'running'].includes(run?.status);
-const isLive = (run) => !run?.dismissed && (needsInput(run) || inProgress(run));
+const inProgress = (run) => ['planning', 'submitting', 'running', 'queued', 'checking'].includes(run?.status);
+const isLive = (run) => !run?.dismissed && (needsInput(run) || inProgress(run) || run?.status === 'unknown');
 const latestActivity = () =>
   state.agentRuns.find((run) => isLive(run) && needsInput(run)) || state.agentRuns.find(isLive);
 function options() {
@@ -70,6 +79,7 @@ function availableModels(ids, snapshot) {
         '2048x2048',
         '2048x1152',
         '3840x2160',
+        '1024x1280', '1280x1024', '1536x1920', '1920x1536',
       ];
       if (!sizes.includes(snapshot.settings.size)) sizes.push(snapshot.settings.size);
       return {
@@ -116,16 +126,20 @@ function planTask(run, plan, model = plan.model) {
     ...ref,
     ...plan.referenceRoles.find((role) => role.id === ref.id),
   }));
+  refs.sort((a, b) => Number(b.id === plan.baseId) - Number(a.id === plan.baseId));
   const task = {
     prompt: plan.prompt,
-    constraints: [run.snapshot.constraints, plan.constraints].filter(Boolean).join('\n'),
+    constraints: plan.constraints,
+    exactText: plan.exactText,
+    operation: plan.operation,
+    baseAssetId: plan.baseId,
     settings,
     refs,
     mask: run.snapshot.mask,
     variant: '',
   };
   task.effectivePrompt = effectivePrompt(task);
-  validateGptTask(task);
+  if (plan.operation !== 'crop') validateGptTask(task);
   return task;
 }
 function compatibleCandidates(run, plan) {
@@ -149,20 +163,25 @@ function planPrice(run, plan) {
 }
 function validateExecution(run, plan, automatic = false) {
   if (run.stopped || run.status !== 'review') throw new Error('此方案已经执行或停止。');
-  if (!state.key || state.base !== run.snapshot.settings.base)
+  if (plan.operation !== 'crop' && (!state.key || state.base !== run.snapshot.settings.base))
     throw new Error('生图连接已变化，请重新规划。');
   const normalized = normalizePlan(plan, run.context);
+  if ((run.planConflicts?.length || run.requirements?.legacy || run.requirements?.requiresReview || requirementConflicts(normalized, run.requirements).length) && run.acknowledgedSignature !== planSignature(normalized))
+    throw new Error('方案与用户要求或继承项有差异，请核对并确认变更。');
+  const issues = executionIssues(normalized, run.snapshot);
+  if (issues.length) throw new Error(issues.join('\n'));
   const task = planTask(run, normalized);
   const price = planPrice(run, normalized);
   if (run.currency !== state.prefs.currency) throw new Error('价格币种已改变，请重新规划。');
-  if (run.costLimit !== null && (price === null || normalized.count * price > run.costLimit + 1e-8))
+  if (normalized.operation !== 'crop' && run.costLimit !== null && (price === null || normalized.count * price > run.costLimit + 1e-8))
     throw new Error(
       price === null
         ? '请先填写此模型单价，或清空费用上限后手动确认首次生成。'
         : '方案超过估算费用上限，请减少张数或调整参数。',
     );
-  if (automatic && (run.costLimit === null || price === null || !state.prefs.agentConfirmed))
-    throw new Error('自动执行需要先确认一次方案，并配置模型价格和费用上限。');
+  if (automatic && !automaticEligible(run, normalized, price, {
+    ...options(), previouslyConfirmed: state.prefs.agentConfirmed, previousScope: state.prefs.agentAutomaticScope,
+  })) throw new Error('本轮范围、规格、参考用途或费用条件已变化，请重新确认。');
   return { plan: normalized, task };
 }
 async function execute(run, plan, automatic = false) {
@@ -170,7 +189,17 @@ async function execute(run, plan, automatic = false) {
   executing = true;
   try {
     const approved = validateExecution(run, plan, automatic);
+    if (run.submissionId) throw new Error('此方案已提交，请查看对应版本。');
     run.plan = approved.plan;
+    run.planRevision ||= 1;
+    run.approval = {
+      version: SESSION_VERSION, runId: run.id, parentId: run.plan.operation === 'create' ? null : run.snapshot.refs.find((ref) => ref.id === run.plan.baseId)?.versionId || run.snapshot.parentId,
+      revision: run.planRevision, signature: planSignature(run.plan),
+      plan: structuredClone(run.plan), requirements: confirmedRequirements(run, run.plan), at: Date.now(),
+    };
+    run.submissionId = uid();
+    run.status = 'submitting';
+    if (editingRunId === run.id) $('agentPlanFields').inert = true;
     run.candidates = compatibleCandidates(run, run.plan);
     run.prices = Object.fromEntries(
       [run.plan.model, ...run.candidates].map((id) => [id, priceFor({ model: id, route: '' })]),
@@ -183,15 +212,18 @@ async function execute(run, plan, automatic = false) {
       await enqueueAgentTasks(run, run.plan, approved.task.settings, approved.task.refs);
     } catch (e) {
       run.status = run.stopped ? 'cancelled' : 'review';
+      delete run.submissionId;
       throw e;
     }
     state.prefs.agentConfirmed = true;
+    state.prefs.agentAutomaticScope = automationScope(run, run.plan, planPrice(run, run.plan));
     if (editingRunId === run.id && $('agentPlanDlg').open) $('agentPlanDlg').close();
     await persist();
     render();
     setStatus('Agent 方案已提交，后续请求受本次次数和估算费用上限约束。');
   } finally {
     executing = false;
+    if (editingRunId === run.id) $('agentPlanFields').inert = false;
   }
 }
 async function planRun(run) {
@@ -231,10 +263,17 @@ async function planRun(run) {
       maxRequests: run.maxRequests,
       questionsRemaining: Math.max(0, 2 - run.rounds),
       answers: run.answers,
+      requirements: run.requirements,
+      selectedVersionId: run.snapshot.parentId || null,
     };
     if (!run.context.availableModels.length)
       throw new Error('当前参考图和参数没有兼容模型，请先调整手动参数。');
-    const previews = await referencePreviews(run.snapshot.refs, controller.signal);
+    const detailReferences = (run.detailReferences || []).filter((ref) => run.snapshot.refs.some((parent) => parent.id === ref.parentId));
+    run.context.detailReferences = detailReferences.map(({ parentId, crop, id }, index) => ({ parentId, crop, id, imageNumber: run.snapshot.refs.length + index + 1 }));
+    const previews = [
+      ...await referencePreviews(run.snapshot.refs, controller.signal),
+      ...await referencePreviews(detailReferences, controller.signal, 1024),
+    ];
     if (state.base !== imageBase || state.key !== imageKey)
       throw new Error('生图连接已变化，请重新规划。');
     run.plannerModel = credentials.model;
@@ -248,6 +287,14 @@ async function planRun(run) {
     run.planningUsage ||= [];
     run.planningUsage.push({ at: Date.now(), usage: data.usage });
     run.plan = normalizePlan(data.plan, run.context);
+    run.planRevision = (run.planRevision || 0) + 1;
+    run.planConflicts = run.plan.decision === 'ready' ? requirementConflicts(run.plan, run.requirements) : [];
+    // Keep the user text intact on the card. Model wording remains an attributed suggestion.
+    if (run.plan.decision === 'ready') {
+      run.suggestions = { constraints: run.plan.constraints, summary: run.plan.summary };
+      run.plan.constraints = run.requirements?.values.constraints || run.plan.constraints;
+      run.plan.exactText = run.requirements?.values.exactText || run.plan.exactText;
+    }
     run.status = run.plan.decision === 'clarify' ? 'questions' : 'review';
     if (run.status === 'review') planTask(run, run.plan);
     if (state.base !== imageBase || state.key !== imageKey)
@@ -283,6 +330,7 @@ export async function startAgentPlan() {
   if (state.agentRuns.filter((r) => r.status === 'planning').length >= 2)
     throw new Error('已有两个方案正在规划，请稍候。');
   const snapshot = readDraft();
+  const requirements = captureRequirements(snapshot, request, taskById(snapshot.parentId)?.confirmedRequirements);
   const inputSignature = JSON.stringify({
     request,
     settings: snapshot.settings,
@@ -307,6 +355,8 @@ export async function startAgentPlan() {
   const config = options();
   const run = {
     id: uid(),
+    schemaVersion: SESSION_VERSION,
+    requirements,
     request: request || '请先询问我希望如何处理这些参考图。',
     snapshot,
     inputSignature,
@@ -363,6 +413,14 @@ function formPlan(run) {
     count: Number($('agentPlanCount').value),
     prompt: $('agentPlanPrompt').value,
     constraints: $('agentPlanConstraints').value,
+    operation: $('agentPlanOperation').value,
+    baseId: $('agentPlanBase').value,
+    exactText: $('agentPlanExactText').value,
+    format: $('agentPlanFormat').value,
+    background: $('agentPlanBackground').value,
+    referenceRoles: Array.from($('agentPlanReferences').querySelectorAll('[data-plan-ref]'), (row) => ({
+      id: row.dataset.planRef, role: row.querySelector('select').value, note: row.querySelector('input').value,
+    })),
   };
 }
 function updatePlanEstimate() {
@@ -371,11 +429,31 @@ function updatePlanEstimate() {
   const plan = formPlan(run),
     price = planPrice(run, plan);
   $('agentPlanEstimate').textContent =
-    `${plan.count} 张 · ${price === null ? '未填写单价，无法估价' : '首次生成估算 ' + money(price * plan.count, run.currency)} · 最多 ${run.maxRequests} 次请求${run.costLimit === null ? '；不自动重试' : '，估算上限 ' + money(run.costLimit, run.currency)}。规划文本费用另计。`;
-  const candidates = compatibleCandidates(run, plan);
+    plan.operation === 'crop' ? '本地裁切 · 0 次生图请求 · 不产生生图费用。确认范围后保存为新版本。' : `${plan.count} 张 · ${price === null ? '未填写单价，无法估价' : '首次生成估算 ' + money(price * plan.count, run.currency)} · 最多 ${run.maxRequests} 次请求${run.costLimit === null ? '；不自动重试' : '，估算上限 ' + money(run.costLimit, run.currency)}。规划文本费用另计。`;
+  const candidates = plan.operation === 'crop' ? [] : compatibleCandidates(run, plan);
   $('agentPlanFallbacks').textContent = candidates.length
     ? '允许的兼容备用：' + candidates.map(gptModelLabel).join('、')
     : '本次没有兼容且已授权的备用模型 / 线路。';
+  const issues = executionIssues(plan, run.snapshot);
+  $('agentPlanIssues').textContent = issues.join(' ');
+  $('agentPrepareOperation').hidden = !['local', 'crop', 'outpaint'].includes(plan.operation);
+  $('agentPrepareOperation').textContent = { local: '划选 / 核对修改区域', crop: '预览裁切范围', outpaint: '设置扩图方向和保留策略' }[plan.operation] || '设置操作范围';
+  const base = run.snapshot.refs.find((ref) => ref.id === plan.baseId);
+  const preview = $('agentPlanBasePreview');
+  if (preview.dataset.baseId !== (base?.id || '')) {
+    preview.dataset.baseId = base?.id || '';
+    preview.innerHTML = base ? `<img src="${escapeHTML(referenceURL(base))}" alt="本轮指定底图"><div><strong>${escapeHTML(base.name)}</strong><p>版本：${escapeHTML(base.versionId || run.snapshot.parentId || '导入素材')}<br>原图保留，结果创建新版本。</p></div>` : '<p>新建作品 · 参考图按各自用途参与创作。</p>';
+  }
+  const conflicts = [...(run.planConflicts || []), ...requirementConflicts(plan, run.requirements)];
+  const unique = [...new Map(conflicts.map((item) => [item.field + JSON.stringify(item.actual), item])).values()];
+  $('agentPlanDifferences').innerHTML = [
+    run.requirements?.legacy ? '<p>旧作品缺少已确认要求记录，请核对保留项和必要参考。</p>' : '',
+    run.requirements?.requiresReview ? '<p>本轮可能改变上一版的文案、Logo 或保留项，请核对需要覆盖的要求。</p>' : '',
+    ...unique.map((item) => `<p><strong>${escapeHTML(item.label)}</strong> · 原要求：${escapeHTML(String(item.expected))}<br>方案建议：${escapeHTML(String(item.actual ?? '未指定'))}</p>`),
+  ].join('');
+  $('agentPlanAcknowledgeLabel').hidden = !unique.length && !run.requirements?.legacy && !run.requirements?.requiresReview;
+  $('agentExecute').textContent = plan.operation === 'crop' ? '预览并确认裁切' : `确认${OPERATIONS[plan.operation] || '生成'} · ${base ? base.name.slice(0, 14) : '新作品'}`;
+  $('agentPlanRoute').textContent = `实际入口：${plan.operation === 'crop' ? '浏览器本地' : run.snapshot.refs.length ? '/images/edits' : '/images/generations'}。${plan.operation === 'create' && run.snapshot.refs.length ? '图片仅作参考，不绑定编辑底图。' : ''}镜头、灯光和构图来自 Agent 建议。字形、Logo、选区与主体结构仍需人工核对。`;
 }
 function openPlan(run) {
   if (!['questions', 'review'].includes(run.status)) return;
@@ -384,16 +462,26 @@ function openPlan(run) {
   $('agentPlanTitle').textContent = questioning ? '补充几个关键点' : '确认创作方案';
   $('agentPlanSummary').textContent = run.plan.summary;
   $('agentPlanError').textContent = run.error || '';
+  $('agentPlanAcknowledge').checked = false;
+  $('agentPlanBasePreview').dataset.baseId = 'refresh';
   $('agentPlanFields').hidden = questioning;
   $('agentQuestions').hidden = !questioning;
   $('agentQuestions').innerHTML = questioning ? questionFields(run) : '';
-  $('agentImportPlan').hidden = questioning;
+  $('agentImportPlan').hidden = false;
+  $('agentPlanKnownRequirements').hidden = !questioning;
+  $('agentPlanKnownRequirements').textContent = questioning ? `当前已记录：${run.requirements?.values.constraints || '保留项待补充'}。${run.snapshot.refs.length} 张参考 · ${run.snapshot.settings.size}。可在回答中说明新的范围或规格，或转到输入框调整。` : '';
   $('agentExecute').textContent = questioning ? '补充并继续规划' : '确认并生成';
   $('agentExecute').disabled = false;
   if (!questioning) {
     const plan = run.plan;
     $('agentPlanPrompt').value = plan.prompt;
     $('agentPlanConstraints').value = plan.constraints;
+    $('agentPlanOperation').value = plan.operation;
+    $('agentPlanExactText').value = plan.exactText || '';
+    $('agentPlanFormat').value = plan.format;
+    $('agentPlanBackground').value = plan.background;
+    $('agentPlanBase').innerHTML = '<option value="">不选择底图（新建）</option>' + run.snapshot.refs.map((ref, i) => `<option value="${escapeHTML(ref.id)}">图 ${i + 1} · ${escapeHTML(ref.name)}</option>`).join('');
+    $('agentPlanBase').value = plan.baseId;
     $('agentPlanModel').innerHTML = run.context.availableModels
       .map((m) => `<option value="${m.id}">${escapeHTML(gptModelLabel(m.id))}</option>`)
       .join('');
@@ -401,18 +489,75 @@ function openPlan(run) {
     $('agentPlanCount').value = plan.count;
     $('agentPlanCount').max = run.maxRequests;
     fillPlanOptions(plan, run);
-    $('agentPlanReferences').textContent = plan.referenceRoles.length
-      ? '参考图用途：' +
-        plan.referenceRoles
-          .map(
-            (ref, i) =>
-              `${i + 1} · ${ROLE_NAMES[ref.role]}${ref.note ? '（' + ref.note + '）' : ''}`,
-          )
-          .join('；')
-      : '不使用参考图。';
+    $('agentPlanReferences').innerHTML = plan.referenceRoles.map((role, i) => {
+      const ref = run.snapshot.refs.find((ref) => ref.id === role.id);
+      return `<div class="agent-plan-reference" data-plan-ref="${escapeHTML(role.id)}"><img src="${escapeHTML(referenceURL(ref))}" alt="参考图 ${i + 1}"><div><label>图 ${i + 1} 用途<select aria-label="图 ${i + 1} 用途">${Object.entries(ROLE_NAMES).map(([key, value]) => `<option value="${key}" ${key === role.role ? 'selected' : ''}>${value}</option>`).join('')}</select></label><input value="${escapeHTML(role.note)}" maxlength="300" aria-label="图 ${i + 1} 参考说明" placeholder="只参考什么 / 保留什么"><button type="button" class="btn" data-detail-reference="${escapeHTML(role.id)}">选取高清细节并重新规划</button></div></div>`;
+    }).join('');
     updatePlanEstimate();
   }
   showDialog('agentPlanDlg');
+  $('agentPlanDlg').querySelector('.preset-dialog-body').scrollTop = 0;
+}
+
+async function prepareOperation(run, plan, commitCrop = false) {
+  const base = run.snapshot.refs.find((ref) => ref.id === plan.baseId);
+  if (!base) throw new Error('请先选择底图。');
+  if (plan.size === 'auto') throw new Error('请先选择明确的交付尺寸。');
+  const mode = { local: 'mask', crop: 'crop', outpaint: 'expand' }[plan.operation];
+  if (!mode) return;
+  const originalSignature = planSignature(plan);
+  $('agentPlanDlg').close();
+  await openEditor(mode, {
+    ref: base, mask: run.snapshot.mask, size: plan.size, format: plan.format,
+    onComplete: () => { if (run.status === 'review') openPlan(run); },
+    onApply: async (result) => {
+      if (run.stopped || run.status !== 'review' || originalSignature !== planSignature(run.plan)) throw new Error('方案已变化或停止，请重新确认。');
+      if (plan.operation === 'crop') {
+        if (!commitCrop) throw new Error('请从确认裁切按钮进入，以保存裁切版本。');
+        if (run.submissionId) return;
+        const issues = executionIssues(plan, run.snapshot);
+        if (issues.length) throw new Error(issues.join(' '));
+        const outputCheck = await inspectOutput(result.ref.blob, plan);
+        const id = uid(), parentId = base.versionId || run.snapshot.parentId || null;
+        const task = {
+          id, parentId, rootId: taskById(parentId)?.rootId || parentId || id,
+          projectId: run.snapshot.projectId, prompt: plan.prompt, constraints: plan.constraints,
+          exactText: plan.exactText, operation: 'crop', refs: run.snapshot.refs,
+          settings: { ...run.snapshot.settings, size: plan.size, format: plan.format }, mask: null,
+          status: 'success', createdAt: Date.now(), finishedAt: Date.now(), outputBlob: result.ref.blob,
+          crop: result.crop, outputCheck, postprocessOnly: true, agentRunId: run.id,
+          confirmedRequirements: confirmedRequirements(run, plan),
+          approval: { signature: originalSignature, plan: structuredClone(plan), at: Date.now() },
+          attempts: 0, batchId: run.id, priceEstimate: 0, currency: run.currency,
+        };
+        run.submissionId = uid(); run.status = 'success'; run.resultIds = [id]; run.taskIds = [id];
+        run.finishedAt = Date.now(); run.localOperation = result.crop;
+        state.tasks.unshift(task);
+        if (!(await persist())) {
+          state.tasks = state.tasks.filter((item) => item.id !== id);
+          run.status = 'review'; delete run.submissionId;
+          throw new Error('裁切版本未能保存，请检查浏览器存储后重试。');
+        }
+        render();
+        setStatus('已保存本地裁切新版本，没有新增生图请求。');
+        return;
+      }
+      if (!result.mask) throw new Error(plan.operation === 'local' ? '请划选修改区域。' : '请开启 AI 补全并保留需要扩展的新区域。');
+      run.snapshot.refs = run.snapshot.refs.map((ref) => ref.id === base.id ? result.ref : ref);
+      run.snapshot.refs.sort((a, b) => Number(b.id === result.ref.id) - Number(a.id === result.ref.id));
+      run.snapshot.mask = result.mask;
+      run.snapshot.settings.size = `${result.mask.width}x${result.mask.height}`;
+      run.snapshot.settings.format = 'png';
+      run.plan = { ...plan, baseId: result.ref.id, size: run.snapshot.settings.size, format: 'png', referenceRoles: plan.referenceRoles.map((ref) => ref.id === base.id ? { ...ref, id: result.ref.id, role: 'base' } : ref) };
+      run.context.hasMask = true;
+      run.context.currentSettings = run.snapshot.settings;
+      run.context.references = run.snapshot.refs.map(({ id, role, note }) => ({ id, role, note }));
+      run.requirements.values.baseId = result.ref.id;
+      run.requirements.references = run.requirements.references.map((ref) => ref.id === base.id ? { ...ref, id: result.ref.id, role: 'base' } : ref);
+      run.planRevision++; delete run.acknowledgedSignature;
+      await persist();
+    },
+  });
 }
 function renderAgentActivity() {
   const panel = $('agentActivity'),
@@ -453,6 +598,10 @@ function renderAgentActivity() {
     questions: '补充几个关键点后，Agent 会继续规划。',
     review: run.plan?.summary || '方案已准备好，请确认后开始生成。',
     running: `${gptModelLabel(run.plan?.model || run.snapshot.settings.model)} · ${run.requests || 0}/${run.maxRequests} 次生图请求`,
+    queued: '方案已确认，等待队列提交。',
+    checking: '正在核对文件、尺寸和格式；创作效果待人工核对。',
+    submitting: '正在校验素材并保存已确认的执行快照。',
+    unknown: '已有请求的结果需要核实；可查看记录和已成功作品，不会自动重发。',
   };
   for (const [id, value] of [
     ['agentActivityStatus', AGENT_STATUSES[run.status]],
@@ -460,6 +609,14 @@ function renderAgentActivity() {
     ['agentActivityRequest', run.request],
   ]) {
     if ($(id).textContent !== value) $(id).textContent = value;
+  }
+  const work = $('agentActivityWork');
+  const plan = run.plan;
+  const signature = JSON.stringify([run.id, planSignature(plan || {}), run.planRevision]);
+  if (work.dataset.signature !== signature) {
+    work.dataset.signature = signature;
+    const base = run.snapshot.refs.find((ref) => ref.id === plan?.baseId);
+    work.innerHTML = `${base ? `<img src="${escapeHTML(referenceURL(base))}" alt="本轮底图">` : ''}<p>${escapeHTML(base ? base.name : '新作品')}<br>${escapeHTML(OPERATIONS[plan?.operation] || '等待规划')} · ${escapeHTML(plan?.size || run.snapshot.settings.size)} · ${plan?.count || 1} 张</p>${plan?.decision === 'ready' ? `<p>改动：${escapeHTML(plan.prompt.slice(0, 150))}</p><p>保留：${escapeHTML(plan.constraints.slice(0, 150) || '请在确认卡中核对')}</p>` : ''}`;
   }
 }
 
@@ -503,12 +660,14 @@ function renderAgentHistory() {
       (
         run,
       ) => `<article class="agent-record" data-agent-run="${run.id}" data-agent-state="${run.status}">
-    <div class="agent-run-heading"><strong>${['planning', 'running'].includes(run.status) ? '<span class="spinner"></span>' : icon('mark')} Agent · ${AGENT_STATUSES[run.status] || '已停止'}</strong><div>${['planning', 'running', 'questions', 'review'].includes(run.status) ? '<button class="btn" data-agent-action="stop">停止</button>' : ''}<button class="icon-btn" data-agent-action="dismiss" aria-label="隐藏方案记录">${icon('close')}</button></div></div>
+    <div class="agent-run-heading"><strong>${inProgress(run) ? '<span class="spinner"></span>' : icon('mark')} Agent · ${AGENT_STATUSES[run.status] || '已停止'}</strong><div>${isLive(run) && run.status !== 'unknown' ? '<button class="btn" data-agent-action="stop">停止</button>' : ''}<button class="icon-btn" data-agent-action="dismiss" aria-label="隐藏方案记录">${icon('close')}</button></div></div>
     <p class="agent-run-request">${escapeHTML(run.request)}</p>
     ${['failed', 'unknown'].includes(run.status) ? '<p class="agent-run-summary">' + escapeHTML(run.error || '查看图片卡片与执行记录。') + '</p>' : ''}
     <div class="agent-run-footer"><span>${run.requests || 0}/${run.maxRequests} 次生图请求${run.usedEstimate ? ' · 已预留估算 ' + money(run.usedEstimate, run.currency) : ''}</span><div>
     ${['questions', 'review'].includes(run.status) ? '<button class="btn primary" data-agent-action="review">' + (run.status === 'questions' ? '补充需求' : '查看并确认方案') + '</button>' : ''}
+    ${inProgress(run) || run.status === 'unknown' ? '<button class="btn" data-agent-action="open">打开此会话</button>' : ''}
     ${run.status !== 'planning' ? '<button class="btn" data-agent-action="import">导入输入框</button>' : ''}
+    ${run.resultIds?.length ? '<button class="btn" data-agent-action="result">查看作品 / 从本版继续</button>' : ''}
     ${run.status === 'failed' ? '<button class="btn" data-agent-action="replan">手动重新规划</button>' : ''}</div></div>
     <details class="agent-execution" ${expanded.has(run.id) ? 'open' : ''}><summary>方案与执行记录</summary><p>${escapeHTML(run.request)}</p><p>${escapeHTML(run.error || run.plan?.summary || '')}</p><p>规划模型：${escapeHTML(run.plannerModel || getAgentConnection().model)} · 规划 ${run.planningUsage?.length || 0} 轮</p>
     ${run.plan?.decision === 'ready' ? `<p>${escapeHTML(run.plan.model)} · ${escapeHTML(run.plan.size)} · ${escapeHTML(run.plan.quality)} · ${run.plan.count} 张</p><p>${escapeHTML(run.plan.prompt)}</p>` : ''}
@@ -590,7 +749,7 @@ async function stopRun(run) {
   run.stopped = true;
   planners.get(run.id)?.abort();
   for (const task of state.tasks.filter((t) => t.agentRunId === run.id)) cancelTask(task);
-  if (run.status !== 'running') run.status = 'cancelled';
+  if (!['running', 'checking', 'queued'].includes(run.status)) run.status = 'cancelled';
   run.error = '后续步骤已停止；已经提交的请求可能仍在服务端处理。';
   if (editingRunId === run.id && $('agentPlanDlg').open) $('agentPlanDlg').close();
   render();
@@ -710,26 +869,36 @@ export function mountAgent() {
       run = runById(button?.closest('[data-agent-run]')?.dataset.agentRun);
     if (!run || !button) return;
     const action = button.dataset.agentAction;
+    if (action === 'open') { $('agentHistoryDlg').close(); activityRunId = run.id; activityOpen = true; renderAgentActivity(); }
     if (action === 'review') {
       $('agentHistoryDlg').close();
       openPlan(run);
     }
     if (action === 'stop') await stopRun(run);
     if (action === 'dismiss') {
-      if (['planning', 'running', 'questions', 'review'].includes(run.status)) await stopRun(run);
+      if (inProgress(run) || needsInput(run)) await stopRun(run);
       run.dismissed = true;
       render();
       await persist();
     }
     if (action === 'import') importRun(run);
+    if (action === 'result') {
+      const task = taskById(run.resultIds[0]);
+      if (task) { $('agentHistoryDlg').close(); openDetail(task.id); }
+    }
     if (action === 'replan') {
       $('agentHistoryDlg').close();
-      run.rounds = 0;
-      run.answers = [];
-      run.stopped = false;
-      activityRunId = run.id;
+      const next = {
+        id: uid(), schemaVersion: SESSION_VERSION, previousRunId: run.id,
+        snapshot: structuredClone(run.snapshot), requirements: structuredClone(run.requirements),
+        request: run.request, createdAt: Date.now(), rounds: 0, answers: [],
+        maxRequests: run.maxRequests, costLimit: run.costLimit, currency: run.currency,
+        allowedCandidates: [...(run.allowedCandidates || [])], requests: 0, usedEstimate: 0, requestLog: [],
+      };
+      state.agentRuns.unshift(next);
+      activityRunId = next.id;
       activityOpen = true;
-      await planRun(run);
+      await planRun(next);
     }
   });
   $('agentActivity').onclick = activityAction;
@@ -757,6 +926,7 @@ export function mountAgent() {
       .forEach((el) => {
         el.checked = false;
       });
+    persist();
   };
   $('agentPlanModel').onchange = () => {
     const run = runById(editingRunId);
@@ -767,19 +937,39 @@ export function mountAgent() {
   $('agentPlanForm').addEventListener('input', () => {
     const run = runById(editingRunId);
     if (run?.status === 'review') {
-      run.plan = formPlan(run);
+      const plan = formPlan(run);
+      if (planSignature(plan) !== planSignature(run.plan)) { run.planRevision++; $('agentPlanAcknowledge').checked = false; delete run.acknowledgedSignature; }
+      run.plan = plan;
       updatePlanEstimate();
+      persist();
     }
   });
   $('agentPlanForm').addEventListener('change', () => {
     const run = runById(editingRunId);
     if (run?.status === 'review') {
-      run.plan = formPlan(run);
+      const plan = formPlan(run);
+      if (planSignature(plan) !== planSignature(run.plan)) { run.planRevision++; $('agentPlanAcknowledge').checked = false; delete run.acknowledgedSignature; }
+      run.plan = plan;
       updatePlanEstimate();
+      persist();
     }
   });
   $('agentPlanDlg').addEventListener('close', () => {
     persist();
+  });
+  $('agentPlanReferences').onclick = guard(async (e) => {
+    const id = e.target.closest('[data-detail-reference]')?.dataset.detailReference;
+    const run = runById(editingRunId);
+    if (!id || !run) return;
+    if (run.snapshot.refs.length + (run.detailReferences?.length || 0) >= 16) throw new Error('预览总数最多 16 张，请减少参考图后添加高清细节。');
+    const ref = run.snapshot.refs.find((ref) => ref.id === id);
+    $('agentPlanDlg').close();
+    await openEditor('crop', { ref, size: '1024x1024', onApply: async (result) => {
+      run.detailReferences ||= [];
+      run.detailReferences.push({ ...result.ref, parentId: id, crop: result.crop });
+      await persist();
+      queueMicrotask(() => planRun(run));
+    } });
   });
   $('agentPlanForm').onsubmit = async (e) => {
     e.preventDefault();
@@ -799,7 +989,14 @@ export function mountAgent() {
         run.pendingAnswers = [];
         $('agentPlanDlg').close();
         await planRun(run);
-      } else await execute(run, formPlan(run));
+      } else {
+        const plan = formPlan(run);
+        if ($('agentPlanAcknowledge').checked) run.acknowledgedSignature = planSignature(plan);
+        if (plan.operation === 'crop') {
+          validateExecution(run, plan);
+          await prepareOperation(run, plan, true);
+        } else await execute(run, plan);
+      }
     } catch (e) {
       $('agentPlanError').textContent = e.message;
     } finally {
@@ -810,13 +1007,34 @@ export function mountAgent() {
     const run = runById(editingRunId);
     if (run) importRun(run);
   };
+  $('agentPrepareOperation').onclick = guard(async () => {
+    const run = runById(editingRunId);
+    if (!run) return;
+    if (run.plan.operation === 'crop') {
+      if ($('agentPlanAcknowledge').checked) run.acknowledgedSignature = planSignature(run.plan);
+      validateExecution(run, run.plan);
+    }
+    await prepareOperation(run, run.plan, run.plan.operation === 'crop');
+  });
+}
+
+export async function continueWithAgent(task) {
+  const pending = state.agentRuns.find((run) => run.snapshot?.parentId === task.id && needsInput(run));
+  if (pending) {
+    activityRunId = pending.id; activityOpen = true;
+    document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
+    renderAgentActivity(); openPlan(pending); return;
+  }
+  await continueTask(task);
+  setComposerMode(true);
+  setStatus('已绑定所选版本与该分支保留要求，填写本轮修改后提交 Agent。');
 }
 function importRun(run) {
   const draft = structuredClone(run.snapshot);
   if (run.plan?.decision === 'ready') {
     const plan = run.plan;
-    draft.prompt = plan.prompt;
-    draft.constraints = [draft.constraints, plan.constraints].filter(Boolean).join('\n');
+    draft.prompt = [plan.prompt, plan.exactText ? '逐字文案（保留空格、大小写和标点）：\n' + plan.exactText : ''].filter(Boolean).join('\n');
+    draft.constraints = plan.constraints;
     draft.settings = {
       ...draft.settings,
       model: plan.model,

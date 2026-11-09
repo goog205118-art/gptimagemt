@@ -16,7 +16,7 @@ import { reblendOutpaint } from './outpaint.js';
 import { cancelTask, retryTasks } from './jobs.js';
 import { askConfirm, guard, notify } from '../ui/dialogs.js';
 import { openEditor } from './editor.js';
-import { renderAgentRuns } from './agent.js';
+import { renderAgentRuns, continueWithAgent } from './agent.js';
 import { syncAgentRuns } from '../core/agent-budget.js';
 function duration(t) {
   const sec = Math.max(
@@ -69,7 +69,7 @@ function cardHTML(t) {
     : `<div class="card-state">${icon(t.status === 'failed' || t.status === 'unknown' ? 'alert' : t.status === 'queued' || t.status === 'retry_wait' ? 'clock' : t.status === 'cancelled' ? 'close' : 'image').replace('<svg ', '<svg class="state-symbol" ')}<div class="state-title">${label}</div><div class="state-detail" title="${escapeHTML(t.error || '')}">${escapeHTML(t.error || (t.status === 'running' ? '画面正在成形，你可以继续下一次创作。' : t.status === 'retry_wait' ? '接口限流，将在等待结束后重试。' : t.status === 'queued' ? '轮到这张时会自动开始。' : '可导入编辑，或重新生成。'))}</div>${t.status === 'running' ? '<div class="skeleton"></div>' : ''}</div>`;
   const menu = [
     success
-      ? '<button data-action="reference">用作参考图</button><button data-action="mask">涂抹局部修改</button><button data-action="adapt">裁切 / 扩展画布</button><button data-action="copyImage">复制图片到 PS</button><button data-action="downloadPng">下载 PS 兼容 PNG</button><button data-action="download">下载原图</button>'
+      ? '<button data-action="agent">Agent 继续本版</button><button data-action="reference">用作参考图</button><button data-action="mask">涂抹局部修改</button><button data-action="adapt">裁切 / 扩展画布</button><button data-action="copyImage">复制图片到 PS</button><button data-action="downloadPng">下载 PS 兼容 PNG</button><button data-action="download">下载原图</button>'
       : '',
     t.rawOutputBlob
       ? '<button data-action="downloadRaw">下载模型原始结果</button><button data-action="reblend">重新自然融合（不生图）</button>'
@@ -216,6 +216,7 @@ function deleteTasks(tasks) {
   persist();
 }
 async function handleAction(t, action) {
+  if (action === 'agent') await continueWithAgent(t);
   if (action === 'continue') await continueTask(t);
   if (action === 'edit') importTask(t);
   if (action === 'queueEdit') {

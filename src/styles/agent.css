@@ -218,6 +218,10 @@
   color: var(--muted);
   font-size: 12px;
 }
+.agent-activity-work { margin-top: 12px; line-height: 1.6; font-size: 12px; }
+.agent-activity-work img { float: left; width: 52px; height: 52px; object-fit: contain; margin: 0 10px 8px 0; }
+.agent-activity-work p { margin: 6px 0; overflow-wrap: anywhere; }
+.agent-activity-work p:nth-of-type(2) { clear: both; }
 .agent-activity-actions {
   justify-content: flex-end;
   border-top: 1px solid var(--line);
@@ -297,6 +301,32 @@
   width: 100%;
   min-width: 0;
 }
+.agent-base-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--soft);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.agent-base-preview img { width: 76px; height: 76px; object-fit: contain; flex: none; }
+.agent-base-preview p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.agent-plan-references { display: grid; gap: 12px; margin-bottom: 20px; }
+.agent-plan-reference { display: flex; gap: 12px; min-width: 0; }
+.agent-plan-reference img { width: 56px; height: 56px; object-fit: contain; flex: none; }
+.agent-plan-reference > div { display: grid; gap: 6px; flex: 1; min-width: 0; }
+.agent-plan-reference label { display: grid; grid-template-columns: 62px minmax(0, 1fr); align-items: center; gap: 8px; font-size: 12px; }
+.agent-plan-reference input, .agent-plan-reference select { width: 100%; min-width: 0; padding: 7px; border: 1px solid var(--line); border-radius: 6px; }
+.agent-plan-reference .btn { justify-self: start; white-space: normal; text-align: left; }
+.agent-differences { font-size: 12px; overflow-wrap: anywhere; line-height: 1.6; }
+.agent-differences:not(:empty) { padding: 12px; background: var(--soft); border-radius: 8px; margin-block: 16px; }
+#agentPlanAcknowledgeLabel { align-items: start; font-size: 12px; line-height: 1.6; }
+#agentPrepareOperation { margin-bottom: 12px; }
+.agent-dialog .agent-execution { margin-bottom: 16px; font-size: 12px; }
+.agent-dialog .agent-execution summary { margin-bottom: 12px; }
 .agent-feedback {
   margin-block: 8px;
   line-height: 1.65;
@@ -373,8 +403,16 @@
 }
 @media (max-width: 600px) {
   .agent-activity {
-    --activity-offset: clamp(8px, calc(100dvh - 420px), 124px);
+    inset-block-start: auto;
+    inset-block-end: max(12px, env(safe-area-inset-bottom));
+    inset-inline: var(--page-gutter);
+    width: auto;
+    max-height: min(64dvh, 480px);
+    transform: translateY(10px);
   }
+  .agent-activity.is-open { transform: none; }
+  .agent-dialog .dialog-actions { flex-wrap: wrap; }
+  .agent-dialog .dialog-actions .btn { min-height: 44px; white-space: normal; }
   .agent-candidates {
     grid-template-columns: minmax(0, 1fr);
   }

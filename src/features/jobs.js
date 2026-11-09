@@ -26,6 +26,9 @@ import { priceFor } from '../services/pricing.js';
 import { duration, render } from './gallery.js';
 import { persist } from '../core/storage.js';
 import { isOutpaintTask } from './outpaint.js';
+import { inspectOutput } from '../core/output-check.js';
+import { decodeImageBlob } from '../core/image-input.js';
+import { executionIssues, planSignature } from '../../shared/agent-requirements.js';
 import { renderAgentRuns, startAgentPlan } from './agent.js';
 import {
   agentCanRetry,
@@ -53,6 +56,7 @@ function effectivePrompt(t) {
       ),
     );
   if (t.constraints) lines.push('必须保持：' + t.constraints);
+  if (t.exactText) lines.push('逐字文案（保留大小写、空格、标点与语言；图中文字需人工核对）：\n' + t.exactText);
   if (t.mask)
     lines.push(
       t.mask.kind === 'outpaint'
@@ -190,20 +194,32 @@ async function enqueueAgentTasks(run, plan, settings, refs) {
     approvedBase = state.base;
   const base = {
     prompt: plan.prompt,
-    constraints: [run.snapshot.constraints, plan.constraints].filter(Boolean).join('\n'),
+    constraints: plan.constraints,
+    exactText: plan.exactText,
+    operation: plan.operation,
+    baseAssetId: plan.baseId,
+    approval: structuredClone(run.approval),
+    confirmedRequirements: structuredClone(run.approval.requirements),
     settings,
     refs: copyRefs(refs),
-    parentId: run.snapshot.parentId,
-    rootId: taskById(run.snapshot.parentId)?.rootId || run.snapshot.parentId || null,
+    parentId: run.approval.parentId || null,
+    rootId: taskById(run.approval.parentId)?.rootId || run.approval.parentId || null,
     projectId: run.snapshot.projectId,
     mask: run.snapshot.mask ? { ...run.snapshot.mask } : null,
   };
   base.effectivePrompt = effectivePrompt({ ...base, variant: '' });
   validateGptTask(base);
+  const issues = executionIssues(plan, run.snapshot);
+  if (issues.length) throw new Error(issues.join(' '));
+  for (const ref of refs) { const image = await decodeImageBlob(ref.blob, ref.name); image.close(); }
   if (base.mask) base.maskValidation = await validateGptMask(base);
   if (run.stopped) throw new Error('本次 Agent 已停止。');
   if (state.key !== approvedKey || state.base !== approvedBase)
     throw new Error('生图连接已改变，请重新确认方案。');
+  if (run.approval.signature !== planSignature(plan)) throw new Error('确认方案已变化，请重新确认。');
+  const currentPrice = priceFor(settings);
+  if (currentPrice !== run.prices[settings.model + settings.route]) throw new Error('估算价格已变化，请重新确认。');
+  if (run.costLimit !== null && (currentPrice === null || plan.count * currentPrice > run.costLimit + 1e-8)) throw new Error('方案超过估算预算。');
   const batch = [];
   for (let i = 0; i < plan.count; i++) {
     const id = uid();
@@ -215,6 +231,7 @@ async function enqueueAgentTasks(run, plan, settings, refs) {
       settings: { ...settings },
       agentRunId: run.id,
       agentRequests: 0,
+      agentPrepared: false,
       agentTried: [settings.model + settings.route],
       status: 'queued',
       createdAt: Date.now(),
@@ -234,11 +251,16 @@ async function enqueueAgentTasks(run, plan, settings, refs) {
   }
   authorizeAgentRun(run);
   state.tasks.unshift(...batch);
-  run.status = 'running';
+  run.status = 'queued';
   run.taskIds = batch.map((t) => t.id);
   state.filter = 'all';
   render();
-  await persist();
+  if (!(await persist())) {
+    state.tasks = state.tasks.filter((task) => !batch.some((item) => item.id === task.id));
+    run.status = 'review'; run.taskIds = [];
+    throw new Error('执行快照未能保存，请检查浏览器存储后重新确认。尚未提交生图请求。');
+  }
+  for (const task of batch) task.agentPrepared = true;
   pump();
 }
 function pump() {
@@ -247,7 +269,7 @@ function pump() {
   while (capacity-- > 0) {
     const t = state.tasks
       .filter(
-        (t) => t.status === 'queued' || (t.status === 'retry_wait' && t.nextRunAt <= Date.now()),
+        (t) => (!t.agentRunId || t.agentPrepared) && (t.status === 'queued' || (t.status === 'retry_wait' && t.nextRunAt <= Date.now())),
       )
       .sort((a, b) => a.queueOrder - b.queueOrder)[0];
     if (!t) break;
@@ -273,6 +295,8 @@ async function runTask(t) {
     key = state.key;
   controllers.set(t.id, controller);
   t.status = 'running';
+  const agentRun = agentRunFor(t);
+  if (agentRun) agentRun.status = 'running';
   t.startedAt = Date.now();
   t.finishedAt = null;
   t.error = '';
@@ -285,7 +309,8 @@ async function runTask(t) {
     responseStatus = 0,
     gotResult = false,
     requestSent = false,
-    parsedResponse = false;
+    parsedResponse = false,
+    acceptedResponse = false;
   const log = {
     id: uid(),
     taskId: t.id,
@@ -314,7 +339,8 @@ async function runTask(t) {
     };
     reserveAgentRequest(t);
     renderAgentRuns();
-    await persist();
+    const recorded = await persist();
+    if (t.agentRunId && !recorded) throw new Error('请求记录未能保存，尚未发送本次请求。');
     requestSent = true;
     let response = await fetch(s.base + prepared.path, {
       method: 'POST',
@@ -346,7 +372,8 @@ async function runTask(t) {
       prepared = await prepareGptRequest(t, correction);
       reserveAgentRequest(t);
       renderAgentRuns();
-      await persist();
+      const correctionRecorded = await persist();
+      if (t.agentRunId && !correctionRecorded) throw new Error('兼容修正记录未能保存，未发送修正请求。');
       parsedResponse = false;
       response = await fetch(s.base + prepared.path, {
         method: 'POST',
@@ -404,6 +431,7 @@ async function runTask(t) {
       if (typeof message !== 'string') message = JSON.stringify(message);
       throw new Error(`HTTP ${response.status} · ${message.slice(0, 500)}`);
     }
+    acceptedResponse = true;
     const item = payload.data?.[0],
       mime =
         payload.output_format === 'jpeg'
@@ -419,22 +447,34 @@ async function runTask(t) {
     if (!validSrc(src)) throw new Error('接口未返回可用图片。请检查模型、路由和参数支持情况。');
     t.src = src;
     gotResult = true;
+    if (agentRun) { agentRun.status = 'checking'; renderAgentRuns(); }
     t.usage = payload.usage || item.usage || null;
     log.usage = t.usage;
     try {
       const rawBlob = await fetchImage(src, controller.signal);
       t.outputBlob = rawBlob;
+      t.outputCheck = await inspectOutput(rawBlob, s, payload.data.length);
       if (isOutpaintTask(t)) t.rawOutputBlob = rawBlob;
       try {
         t.outputBlob = await encodeGptOutput(t, rawBlob);
       } catch (e) {
         t.resultWarning = '图片已生成，但本地选区保护或格式处理失败：' + e.message;
       }
+      if (t.outputBlob !== rawBlob) {
+        const finalCheck = await inspectOutput(t.outputBlob, s);
+        t.outputCheck.delivered = finalCheck.actual;
+        t.outputCheck.issues.push(...finalCheck.issues);
+      }
     } catch {
       t.outputBlob = null;
+      t.outputCheck = { checkedAt: Date.now(), actual: null, issues: ['未能读取结果文件，请下载后核对。'], visualStatus: 'unchecked' };
       if (t.mask) t.resultWarning = '图片已生成，但未能读取原图做选区保护，请先下载检查。';
     }
     if (t.outputBlob) delete t.src;
+    if (t.agentRunId) {
+      const review = [...(t.outputCheck?.issues || []), '文案、Logo、主体结构与选区尚未完成视觉核对。'];
+      t.resultWarning = [t.resultWarning, ...review].filter(Boolean).join(' ');
+    }
     t.status = 'success';
     t.finishedAt = Date.now();
     t.priceEstimate = t.pricePerImage ?? null;
@@ -449,11 +489,11 @@ async function runTask(t) {
       log.estimatedCost = t.pricePerImage ?? null;
     } else {
       const ambiguous =
-        timedOut ||
+        requestSent && (timedOut ||
         e instanceof TypeError ||
         controller.signal.aborted ||
         responseStatus >= 500 ||
-        (requestSent && responseStatus === 200 && !parsedResponse);
+        (responseStatus === 200 && (!parsedResponse || acceptedResponse)));
       t.status = ambiguous ? 'unknown' : 'failed';
       t.error = timedOut
         ? `生成超过 ${t.settings.timeout} 秒，已停止等待。服务端可能仍在处理，请核实用量后再重试。`

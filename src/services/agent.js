@@ -56,7 +56,7 @@ export async function agentQuery(action, fields = {}, signal, config) {
   if (!response.ok || data.success === false) throw new Error(data.message || 'Agent 请求失败。');
   return data;
 }
-export async function referencePreviews(refs, signal) {
+export async function referencePreviews(refs, signal, maxEdge = 640) {
   const result = [];
   for (const [index, ref] of refs.entries()) {
     signal?.throwIfAborted();
@@ -64,7 +64,7 @@ export async function referencePreviews(refs, signal) {
     const blob = await ownImageBytes(ref.blob, label);
     const bitmap = await decodeImageBlob(blob, label);
     try {
-      const scale = Math.min(1, 640 / Math.max(bitmap.width, bitmap.height));
+      const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(bitmap.width * scale));
       canvas.height = Math.max(1, Math.round(bitmap.height * scale));

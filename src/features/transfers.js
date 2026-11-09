@@ -11,6 +11,7 @@ import { parseBase } from '../services/connection.js';
 import { normalizeTask } from '../app.js';
 import { renderLibrary, renderProjects } from './library.js';
 import { photoshopPng } from '../services/desktop-image.js';
+import { recoverAgentSession } from '../core/agent-session.js';
 function safeName(value) {
   return (
     String(value || 'openlux')
@@ -384,8 +385,7 @@ function mountFeaturesTransfers() {
         if (!validId(ref.id) || !(ref.blob instanceof Blob))
           throw new Error('Agent 参考素材无效。');
       run.stopped = true;
-      run.status = 'cancelled';
-      run.error = '从备份恢复的 Agent 方案仅供查看和导入，不会自动执行。';
+      recoverAgentSession(run, restored.tasks, true);
     }
     for (const t of restored.tasks) {
       if (

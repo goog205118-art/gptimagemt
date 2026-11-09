@@ -141,14 +141,14 @@ function mountFeaturesReferences() {
   $('refs').onchange = (e) => {
     if (e.target.dataset.role) {
       const ref = state.refs.find((r) => r.id === e.target.dataset.role);
-      if (ref) ref.role = e.target.value;
+      if (ref) { ref.role = e.target.value; ref.userRole = e.target.value; }
       scheduleDraft();
     }
   };
   $('refs').oninput = (e) => {
     if (e.target.dataset.refNote) {
       const ref = state.refs.find((r) => r.id === e.target.dataset.refNote);
-      if (ref) ref.note = e.target.value;
+      if (ref) { ref.note = e.target.value; ref.userNote = e.target.value; }
       scheduleDraft();
     }
   };

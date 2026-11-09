@@ -15,6 +15,7 @@ import { $ } from './core/dom.js';
 import { renderProjects } from './features/library.js';
 import { render } from './features/gallery.js';
 import { writeImageDrag } from './core/drag-image.js';
+import { recoverAgentSession } from './core/agent-session.js';
 function startDrag(e, id, src, name) {
   writeImageDrag(e.dataTransfer, { id, src, name });
 }
@@ -88,21 +89,7 @@ async function init() {
   );
   for (const log of state.ledger) if (log.status === 'running') log.status = 'unknown';
   for (const run of state.agentRuns) {
-    if (run.status === 'planning') {
-      run.status = 'failed';
-      run.error = '页面关闭或刷新后停止了规划。确认服务商文本用量后，可手动重试。';
-    }
-    if (run.status === 'running') {
-      run.status = 'unknown';
-      run.stopped = true;
-      run.error = '页面已刷新，执行暂停。请核实已有请求，不会自动恢复 Agent。';
-      for (const task of state.tasks.filter((t) => t.agentRunId === run.id)) {
-        if (['queued', 'retry_wait'].includes(task.status)) {
-          task.status = 'cancelled';
-          task.error = 'Agent 会话已中断，未自动重新提交。';
-        }
-      }
-    }
+    recoverAgentSession(run, state.tasks);
   }
   seedPromptPresets();
   initializeModelControls();

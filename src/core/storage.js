@@ -36,6 +36,7 @@ function readDB() {
 function rootSnapshot() {
   return {
     version: 3,
+    agentSchemaVersion: 1,
     tasks: state.tasks,
     projects: state.projects,
     presets: state.presets,
