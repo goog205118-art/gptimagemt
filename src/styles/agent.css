@@ -437,6 +437,21 @@
     display: none;
   }
 }
+.agent-plan-variants { display: grid; gap: 12px; margin-block: 12px 18px; }
+.agent-variant { display: grid; gap: 10px; padding: 12px; background: var(--soft); border-radius: 12px; min-width: 0; }
+.agent-variant label { display: grid; gap: 6px; font-size: 13px; }
+.agent-variant input, .agent-variant textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.agent-variant input[type=text], #agentPlanVariantAxis { font: inherit; font-size: 13px; min-height: 38px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); width: 100%; box-sizing: border-box; }
+.agent-variant .agent-variant-choice { display: flex; align-items: center; min-height: 32px; }
+.agent-variant-choice input { width: 18px; height: 18px; }
+.agent-variant-description { margin: 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-variant details summary { font-size: 12px; cursor: pointer; }
+.agent-variant details[open] { display: grid; gap: 10px; }
+.agent-suggestion-groups { display: flex; flex-wrap: wrap; gap: 8px; }
+.agent-suggestion-groups .btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.agent-request-prompt { white-space: pre-wrap; overflow-wrap: anywhere; }
+#agentPlanRequestPreview { overflow-wrap: anywhere; }
+#agentPlanRequestPreview details { margin-block: 10px; }
 @media (prefers-reduced-motion: reduce) {
   .agent-activity {
     --activity-motion: 70ms;

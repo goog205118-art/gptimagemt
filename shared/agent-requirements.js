@@ -1,6 +1,6 @@
 export const SESSION_VERSION = 1;
 export const OPERATIONS = { create: '新建', edit: '整图修改', local: '局部修改', crop: '本地裁切', outpaint: '扩图' };
-export const FIELD_NAMES = { operation: '操作', baseId: '底图', count: '张数', size: '尺寸', ratio: '画幅', format: '格式', background: '背景', constraints: '保留要求', exactText: '精确文案' };
+export const FIELD_NAMES = { operation: '操作', baseId: '底图', count: '张数', size: '尺寸', ratio: '画幅', format: '格式', background: '背景', constraints: '保留要求', exactText: '精确文案', variantAxis: '变化维度' };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // These conservative extractions are shown for confirmation. The original request
@@ -12,6 +12,7 @@ export function captureRequirements(snapshot, request, inherited = null) {
     if (inherited?.values?.[key]) set(key, inherited.values[key], { kind: 'version', versionId: snapshot.parentId, original: inherited.sources?.[key] });
   if (snapshot.constraints?.trim()) set('constraints', snapshot.constraints.trim(), { kind: 'user', text: snapshot.constraints });
   const explicit = (key, value) => set(key, value, { kind: 'request', text: request });
+  if (snapshot.variantAxis) set('variantAxis', snapshot.variantAxis, { kind: 'user', text: snapshot.variantAxis });
   const count = request.match(/(\d+|[一二两三四五六七八九])\s*张/);
   if (count) explicit('count', Number.isFinite(Number(count[1])) ? Number(count[1]) : ({ 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 })[count[1]]);
   const size = request.match(/\b(\d{3,4})\s*[x×]\s*(\d{3,4})\b/i);
@@ -50,6 +51,7 @@ export function captureRequirements(snapshot, request, inherited = null) {
   });
   return {
     version: SESSION_VERSION, values, sources, originalRequest: request,
+    variationOptions: snapshot.variantAxis ? (snapshot.variants || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean) : [],
     references,
     requiresReview: !!inherited && /Logo|标志|文案|文字|材质|结构|保留项/i.test(request) && /改|换|替换|去掉|删除|取消|不要|不再/.test(request),
     legacy: !!snapshot.parentId && !inherited,
@@ -77,6 +79,8 @@ export function requirementConflicts(plan, requirements) {
     if (ref.locked && (!actual || actual.role !== ref.role || actual.note !== ref.note))
       conflicts.push({ field: `reference:${ref.id}`, label: '参考用途', expected: `${ref.role} · ${ref.note}`, actual: actual ? `${actual.role} · ${actual.note}` : '缺失' });
   }
+  if (requirements.variationOptions?.length && (plan.variants?.length !== requirements.variationOptions.length || requirements.variationOptions.some((option, i) => !plan.variants?.[i]?.prompt?.includes(option))))
+    conflicts.push({ field: 'variants', label: '逐张变化', expected: requirements.variationOptions.join('；'), actual: plan.variants?.map((variant) => variant.prompt).join('；') || '缺失' });
   return conflicts;
 }
 
@@ -96,7 +100,7 @@ export function executionIssues(plan, snapshot) {
 }
 
 export function planSignature(plan) {
-  return JSON.stringify(['operation', 'baseId', 'prompt', 'constraints', 'exactText', 'model', 'size', 'quality', 'format', 'background', 'count', 'referenceRoles'].map((key) => plan[key] ?? null));
+  return JSON.stringify(['operation', 'baseId', 'prompt', 'constraints', 'exactText', 'model', 'size', 'quality', 'format', 'background', 'count', 'referenceRoles', 'variantAxis', 'variants'].map((key) => plan[key] ?? null));
 }
 
 export function confirmedRequirements(run, plan) {

@@ -29,6 +29,7 @@ import { isOutpaintTask } from './outpaint.js';
 import { inspectOutput } from '../core/output-check.js';
 import { decodeImageBlob } from '../core/image-input.js';
 import { executionIssues, planSignature } from '../../shared/agent-requirements.js';
+import { agentImageSpecs, imagePromptLines } from '../../shared/agent-variants.js';
 import { renderAgentRuns, startAgentPlan } from './agent.js';
 import {
   agentCanRetry,
@@ -45,8 +46,7 @@ function currentLimit() {
   return limit;
 }
 function effectivePrompt(t) {
-  const lines = [t.prompt];
-  if (t.variant) lines.push(`本次方案：${t.variantAxis || '变化'}为 ${t.variant}。`);
+  const lines = imagePromptLines(t);
   if (t.refs.length)
     lines.push(
       '参考图说明（按上传顺序）：',
@@ -162,6 +162,7 @@ async function submit() {
             batchName: prompt.slice(0, 40),
             variant,
             variantAxis: $('variantAxis').value,
+            variantCount: variants.length,
             attempts: 0,
             rateRetries: 0,
             favorite: false,
@@ -190,6 +191,7 @@ async function submit() {
 }
 async function enqueueAgentTasks(run, plan, settings, refs) {
   if (!state.key) throw new Error('请先连接生图 API。');
+  const imageSpecs = agentImageSpecs(plan);
   const approvedKey = state.key,
     approvedBase = state.base;
   const base = {
@@ -221,10 +223,11 @@ async function enqueueAgentTasks(run, plan, settings, refs) {
   if (currentPrice !== run.prices[settings.model + settings.route]) throw new Error('估算价格已变化，请重新确认。');
   if (run.costLimit !== null && (currentPrice === null || plan.count * currentPrice > run.costLimit + 1e-8)) throw new Error('方案超过估算预算。');
   const batch = [];
-  for (let i = 0; i < plan.count; i++) {
+  for (const spec of imageSpecs) {
     const id = uid();
-    batch.push({
+    const task = {
       ...base,
+      ...spec,
       id,
       rootId: base.rootId || id,
       refs: copyRefs(base.refs),
@@ -238,8 +241,6 @@ async function enqueueAgentTasks(run, plan, settings, refs) {
       queueOrder: ++runtime.queueCounter,
       batchId: run.id,
       batchName: run.request.slice(0, 40),
-      variant: '',
-      variantAxis: '',
       attempts: 0,
       rateRetries: 0,
       favorite: false,
@@ -247,7 +248,10 @@ async function enqueueAgentTasks(run, plan, settings, refs) {
       currency: run.currency,
       pricePerImage: run.prices[settings.model + settings.route] ?? null,
       priceEstimate: null,
-    });
+    };
+    task.effectivePrompt = effectivePrompt(task);
+    validateGptTask(task);
+    batch.push(task);
   }
   authorizeAgentRun(run);
   state.tasks.unshift(...batch);
@@ -333,6 +337,11 @@ async function runTask(t) {
     const s = t.settings;
     let prepared = await prepareGptRequest(t);
     t.submittedPrompt = prepared.params.prompt;
+    t.requestSummary = { method: 'POST', path: prepared.path, n: prepared.params.n ?? 1,
+      model: prepared.params.model, size: prepared.params.size, quality: prepared.params.quality,
+      format: prepared.params.format || prepared.params.output_format,
+      refIds: t.refs.map((ref) => ref.id), maskAssetId: t.mask?.assetId || null,
+      maskMode: t.maskTransport, sourceRefIndex: t.outpaintSourceIndex };
     const headers = {
       ...prepared.headers,
       Authorization: 'Bearer ' + key,
@@ -370,6 +379,8 @@ async function runTask(t) {
     if (correction && agentCanRetry(t)) {
       recordAgentHealth(t, 'parameter_rejected', Date.now() - t.startedAt);
       prepared = await prepareGptRequest(t, correction);
+      t.submittedPrompt = prepared.params.prompt;
+      t.requestSummary = { ...t.requestSummary, path: prepared.path, n: prepared.params.n ?? 1, model: prepared.params.model };
       reserveAgentRequest(t);
       renderAgentRuns();
       const correctionRecorded = await persist();

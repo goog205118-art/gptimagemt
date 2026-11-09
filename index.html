@@ -1339,12 +1339,17 @@
           <div id="agentQuestions" class="agent-questions"></div>
           <div id="agentPlanFields">
             <div id="agentPlanBasePreview" class="agent-base-preview"></div>
+            <section id="agentPlanVariation" hidden>
+              <div id="agentPlanSuggestions" hidden><p id="agentPlanSuggestionType" class="agent-help"></p><div id="agentPlanSuggestionGroups" class="agent-suggestion-groups"></div><p id="agentPlanSuggestionReason" class="agent-help"></p><p id="agentPlanSelectedCount" role="status" class="agent-help"></p></div>
+              <div class="field"><label for="agentPlanVariantAxis">变化维度</label><input id="agentPlanVariantAxis" maxlength="100" placeholder="如：光线；仅在此维度内适度变化" /></div>
+              <div id="agentPlanVariants" class="agent-plan-variants"></div>
+            </section>
             <div class="preset-field-row">
               <div class="field"><label for="agentPlanOperation">本轮操作</label><select id="agentPlanOperation"><option value="create">新建</option><option value="edit">整图修改</option><option value="local">局部修改</option><option value="crop">本地裁切</option><option value="outpaint">扩图</option></select></div>
               <div class="field"><label for="agentPlanBase">指定底图</label><select id="agentPlanBase"></select></div>
             </div>
             <div class="field">
-              <label for="agentPlanPrompt">本轮改什么 / 创作要求</label
+              <label for="agentPlanPrompt">单张创作要求（多张共用）</label
               ><textarea id="agentPlanPrompt" rows="4" maxlength="32000"></textarea>
             </div>
             <div class="field">
@@ -1382,6 +1387,7 @@
             <p id="agentPlanFallbacks" class="agent-help"></p>
             <p id="agentPlanRoute" class="agent-help"></p>
             </details>
+            <details id="agentPlanExecutionPreview" class="agent-execution"><summary>程序将如何执行 · 逐张发送内容</summary><div id="agentPlanRequestPreview"></div></details>
           </div>
           <p id="agentPlanError" class="agent-feedback error" role="alert"></p>
         </div>

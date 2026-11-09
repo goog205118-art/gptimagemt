@@ -34,7 +34,9 @@ export function reserveAgentRequest(task) {
   run.usedEstimate += price ?? 0;
   task.agentRequests = (task.agentRequests || 0) + 1;
   run.requestLog.push({ taskId: task.id, model: id, at: Date.now(), estimate: price ?? null,
-    operation: task.operation, baseAssetId: task.baseAssetId, parentId: task.parentId, planRevision: task.approval?.revision });
+    operation: task.operation, baseAssetId: task.baseAssetId, parentId: task.parentId, planRevision: task.approval?.revision,
+    variantLabel: task.variantLabel, variantAxis: task.variantAxis, variantIndex: task.variantIndex,
+    prompt: task.submittedPrompt, request: task.requestSummary ? structuredClone(task.requestSummary) : null });
 }
 export function agentCanRetry(task, nextPrice) {
   if (!task.agentRunId) return true;

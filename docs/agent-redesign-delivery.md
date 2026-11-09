@@ -50,6 +50,10 @@ node scripts/agent-smoke.mjs
 
 ## 界面复核
 
+后续修复：多张变体原先重复公共提示词，可能把“生成三张及三套设计”一并传给每个请求。现已拆为单张共同要求、变化维度及逐张差异；逐张预览使用实际请求构建函数，实际请求与变体写入日志。AI 根据图片内容与用途提供内容类型、推荐维度、理由和具体细节，用户选定后生成，默认不勾选；切换维度或重新规划会清空选择，关闭再打开保留选择与编辑。自动执行同样等待变体选择。只选一项就只创建一个任务。
+
+已设置的变化维度/各行内容进入规划上下文和要求冲突检查；变体修改会撤销确认。旧多张方案阻止直接重发，转手动使用每行一张。新增 5 项测试，当前共 53 项通过；模拟浏览器共 26 项场景，包括逐张隔离、推荐选择、单项交付、自动执行等待选择、预览与实际请求一致、旧批次指令零请求拦截和转手动数量验证。局部编辑与扩图也对照实际发送提示词，修正了预览遗漏父版本场景信息的问题；检查选中子版本时继承的根版本场景一致。提示词语义检查为有限规则，内容类型及理由是模型建议，模拟验收不证明真实模型一定遵循要求。
+
 ROUND 1
 Seen in one second: 作品底图与确认操作。
 Idea (one sentence): 每次确认都指向一张作品和一个版本。
@@ -73,3 +77,15 @@ Top three problems (most visible first), each with the screenshot it shows in an
 1. 窄屏长表单需内部滚动；标题、关闭和确认按钮固定可达。
 2. 既有界面的辅助字号偏小；本次保留布局密度，新增正文维持 12–13px。
 3. 真实输入法和触屏画布仍需设备验证，模拟浏览器未替代实机验收。
+
+变体界面 ROUND 1–2
+Seen in one second: 推荐维度、推荐原因和待选择的变化细节。
+Idea (one sentence): 用户选择具体变化后，才将方案拆成可预览的独立请求。
+Live thing: 切换推荐维度、勾选方案、修改细节、逐张预览实际提示词。
+Layout words by section: base=版本缩略图 / suggestions=维度与勾选列表 / execution=折叠请求预览。
+Scores: design 7.5 · usability 8 · creativity 6 · content 8 → overall 7.4。
+Caps applied: 延续现有工作室，不套营销页摄影或动画要求。
+Top three problems (most visible first), each with the screenshot it shows in and the fix:
+1. 初版 variants-mobile 原生输入框与现有表单不一致；已统一控件样式。
+2. 初版长编辑行占据整屏；最终 variant-recommendations 与 variants-mobile 默认显示勾选、名称和差异，将编辑收进「调整细节」，推荐区前置到底图之后。
+3. 完整执行提示词仍较长；折叠逐张展开，正文可换行，底部确认固定可达。布局检查 0 FAIL、3 WARN，警告仍来自现有空图库留白和紧凑辅助文字。

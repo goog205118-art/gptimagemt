@@ -4,6 +4,8 @@ import { persist, storageSet } from '../core/storage.js';
 import { uid, escapeHTML } from '../core/utils.js';
 import { ROLE_NAMES } from '../core/config.js';
 import { AGENT_MODEL, AGENT_STATUSES, normalizePlan } from '../../shared/agent-protocol.js';
+import { agentImageSpecs } from '../../shared/agent-variants.js';
+import { prepareGptRequest } from '../services/images.js';
 import {
   AGENT_CONNECTION_KEY,
   agentQuery,
@@ -133,13 +135,21 @@ function planTask(run, plan, model = plan.model) {
     exactText: plan.exactText,
     operation: plan.operation,
     baseAssetId: plan.baseId,
+    parentId: plan.operation === 'create' ? null : run.snapshot.refs.find((ref) => ref.id === plan.baseId)?.versionId || run.snapshot.parentId,
     settings,
     refs,
     mask: run.snapshot.mask,
     variant: '',
   };
+  task.rootId = taskById(task.parentId)?.rootId || task.parentId || null;
+  const specs = agentImageSpecs(plan);
+  for (const spec of specs) {
+    const imageTask = { ...task, ...spec };
+    imageTask.effectivePrompt = effectivePrompt(imageTask);
+    if (plan.operation !== 'crop') validateGptTask(imageTask);
+  }
+  Object.assign(task, specs[0]);
   task.effectivePrompt = effectivePrompt(task);
-  if (plan.operation !== 'crop') validateGptTask(task);
   return task;
 }
 function compatibleCandidates(run, plan) {
@@ -166,6 +176,8 @@ function validateExecution(run, plan, automatic = false) {
   if (plan.operation !== 'crop' && (!state.key || state.base !== run.snapshot.settings.base))
     throw new Error('生图连接已变化，请重新规划。');
   const normalized = normalizePlan(plan, run.context);
+  if (plan.variationSuggestions?.length && !run.variationSelection?.length)
+    throw new Error('请先选择 AI 推荐的变化维度和细节，再确认生成。');
   if ((run.planConflicts?.length || run.requirements?.legacy || run.requirements?.requiresReview || requirementConflicts(normalized, run.requirements).length) && run.acknowledgedSignature !== planSignature(normalized))
     throw new Error('方案与用户要求或继承项有差异，请核对并确认变更。');
   const issues = executionIssues(normalized, run.snapshot);
@@ -252,6 +264,12 @@ async function planRun(run) {
       request: run.request,
       originalConstraints: run.snapshot.constraints,
       currentSettings: run.snapshot.settings,
+      variationRecommendationsRequired: true,
+      variation: {
+        axis: run.snapshot.variantAxis || '',
+        options: (run.snapshot.variants || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
+        strength: '保持主体与共同要求，仅在指定维度内适度变化',
+      },
       hasMask: !!run.snapshot.mask,
       references: run.snapshot.refs.map(({ id, role, note }, i) => ({
         id,
@@ -287,6 +305,9 @@ async function planRun(run) {
     run.planningUsage ||= [];
     run.planningUsage.push({ at: Date.now(), usage: data.usage });
     run.plan = normalizePlan(data.plan, run.context);
+    delete run.variationGroup;
+    delete run.variationSelection;
+    delete run.variantDrafts;
     run.planRevision = (run.planRevision || 0) + 1;
     run.planConflicts = run.plan.decision === 'ready' ? requirementConflicts(run.plan, run.requirements) : [];
     // Keep the user text intact on the card. Model wording remains an attributed suggestion.
@@ -335,6 +356,8 @@ export async function startAgentPlan() {
     request,
     settings: snapshot.settings,
     constraints: snapshot.constraints,
+    variantAxis: snapshot.variantAxis,
+    variants: snapshot.variants,
     refs: snapshot.refs.map(({ id, role, note }) => ({ id, role, note })),
     mask: snapshot.mask,
   });
@@ -405,12 +428,32 @@ function fillPlanOptions(plan, run) {
   syncPickers();
 }
 function formPlan(run) {
+  let count = Number($('agentPlanCount').value);
+  syncVariantFields(run, count);
+  const rows = Array.from($('agentPlanVariants').children);
+  let variants;
+  if (run.plan.variationSuggestions?.length) {
+    const drafts = rows.map((row) => {
+      const draft = { label: row.querySelector('input[type=text]').value, prompt: row.querySelector('textarea').value };
+      row.querySelector('.agent-variant-description').textContent = draft.prompt;
+      row.querySelector('.agent-variant-choice span').textContent = draft.label;
+      return draft;
+    });
+    run.variantDrafts ||= {};
+    run.variantDrafts[run.variationGroup] = drafts;
+    run.variationSelection = rows.flatMap((row, i) => row.querySelector('input[type=checkbox]').checked ? [i] : []);
+    variants = run.variationSelection.map((i) => drafts[i]);
+    count = variants.length;
+    $('agentPlanCount').value = count;
+  } else variants = count > 1 ? rows.map((row) => ({ label: row.querySelector('input').value, prompt: row.querySelector('textarea').value })) : [];
   return {
     ...run.plan,
     model: $('agentPlanModel').value,
     size: $('agentPlanSize').value,
     quality: $('agentPlanQuality').value,
-    count: Number($('agentPlanCount').value),
+    count,
+    variantAxis: variants.length ? $('agentPlanVariantAxis').value : '',
+    variants,
     prompt: $('agentPlanPrompt').value,
     constraints: $('agentPlanConstraints').value,
     operation: $('agentPlanOperation').value,
@@ -422,6 +465,62 @@ function formPlan(run) {
       id: row.dataset.planRef, role: row.querySelector('select').value, note: row.querySelector('input').value,
     })),
   };
+}
+function syncVariantFields(run, count, reset = false) {
+  const panel = $('agentPlanVariation');
+  const list = $('agentPlanVariants');
+  const groups = run.plan.variationSuggestions || [];
+  $('agentPlanCount').readOnly = !!groups.length;
+  $('agentPlanVariantAxis').readOnly = !!groups.length;
+  $('agentPlanSuggestions').hidden = !groups.length;
+  if (groups.length) {
+    panel.hidden = false;
+    run.variationGroup ??= Math.max(0, groups.findIndex((group) => group.axis === run.plan.variantAxis));
+    const group = groups[run.variationGroup];
+    $('agentPlanVariantAxis').value = group.axis;
+    if (!reset && list.dataset.group === `${run.id}:${run.variationGroup}`) return;
+    list.dataset.group = `${run.id}:${run.variationGroup}`;
+    $('agentPlanSuggestionType').textContent = `AI 判断：${run.plan.contentType || '当前图片创作'}。选择一个变化维度，再勾选要生成的细节；最多 ${run.maxRequests} 张。`;
+    $('agentPlanSuggestionGroups').innerHTML = groups.map((item, i) => `<button type="button" class="btn ${i === run.variationGroup ? 'outlined' : ''}" aria-pressed="${i === run.variationGroup}" data-variation-group="${i}">${escapeHTML(item.axis)}</button>`).join('');
+    $('agentPlanSuggestionReason').textContent = group.reason;
+    const drafts = run.variantDrafts?.[run.variationGroup] || group.variants;
+    list.innerHTML = drafts.map((variant, i) => `<div class="agent-variant"><label class="agent-variant-choice"><input type="checkbox" aria-label="选用${escapeHTML(variant.label)}" ${run.variationSelection?.includes(i) ? 'checked' : ''}><span>${escapeHTML(variant.label)}</span></label><p class="agent-variant-description">${escapeHTML(variant.prompt)}</p><details><summary>调整细节</summary><label>名称<input type="text" aria-label="建议 ${i + 1} 名称" value="${escapeHTML(variant.label)}" maxlength="100"></label><label>变化细节<textarea aria-label="建议 ${i + 1} 变化细节" rows="2" maxlength="4000">${escapeHTML(variant.prompt)}</textarea></label></details></div>`).join('');
+    return;
+  }
+  delete list.dataset.group;
+  panel.hidden = !(count > 1);
+  const length = Number.isInteger(count) && count > 1 ? Math.min(3, count) : 0;
+  if (!reset && list.children.length === length) return;
+  const previous = reset ? run.plan.variants || [] : Array.from(list.children, (row) => ({ label: row.querySelector('input').value, prompt: row.querySelector('textarea').value }));
+  list.innerHTML = Array.from({ length }, (_, i) => {
+    const variant = previous[i] || { label: '', prompt: '' };
+    return `<div class="agent-variant"><label>图片 ${i + 1} · 名称<input type="text" aria-label="图片 ${i + 1} 变体名称" value="${escapeHTML(variant.label)}" maxlength="100" placeholder="如：柔和侧光"></label><label>本张变化<textarea aria-label="图片 ${i + 1} 本张变化" rows="2" maxlength="4000" placeholder="只写这一张在变化维度上的差异">${escapeHTML(variant.prompt)}</textarea></label></div>`;
+  }).join('');
+}
+
+async function requestPreview(run, plan) {
+  const container = $('agentPlanRequestPreview');
+  let signature;
+  try {
+    if (plan.variationSuggestions?.length && !plan.count) throw new Error('请先勾选至少一个变化细节。');
+    const task = planTask(run, plan);
+    const route = plan.operation === 'crop' ? '本地处理' : task.refs.length ? 'POST /images/edits' : 'POST /images/generations';
+    const specs = agentImageSpecs(plan);
+    const expanded = $('agentPlanExecutionPreview').open;
+    signature = JSON.stringify([run.id, planSignature(plan), task.refs.map((ref) => ref.id), run.planRevision, expanded]);
+    if (container.dataset.signature === signature) return;
+    container.dataset.signature = signature;
+    const overview = `<p>${plan.operation === 'crop' ? '不发送生图请求。' : `程序将拆为 ${specs.length} 个请求，每个请求 n=1。首次生成共 ${specs.length} 张；重试与回退共用 ${run.maxRequests} 次请求上限。`}<br>${escapeHTML(route)} · ${escapeHTML(plan.model)} · ${escapeHTML(plan.size)} · ${escapeHTML(plan.format)}</p><p>参考顺序：${escapeHTML(task.refs.map((ref, i) => `图 ${i + 1}：${ref.name}（${ROLE_NAMES[ref.role]}，${ref.id}）`).join('；') || '无参考图')}。</p>`;
+    container.innerHTML = overview;
+    if (!expanded || plan.operation === 'crop') return;
+    const prepared = await Promise.all(specs.map((spec) => prepareGptRequest({ ...task, ...spec, effectivePrompt: effectivePrompt({ ...task, ...spec }) })));
+    if (container.dataset.signature !== signature) return;
+    container.innerHTML = overview + prepared.map((request, i) => `<details><summary>图片 ${i + 1}${specs[i].variantLabel ? ' · ' + escapeHTML(specs[i].variantLabel) : ''} · 完整发送提示词</summary><p>POST ${escapeHTML(request.path)} · n=${request.params.n}</p><p class="agent-request-prompt">${escapeHTML(request.params.prompt)}</p></details>`).join('') + (task.mask ? '<p>以上已包含程序追加的选区或扩图说明。蒙版按当前线路使用原生蒙版或引导图；结果保护策略见作品详情。</p>' : '');
+  } catch (error) {
+    if (signature && container.dataset.signature !== signature) return;
+    delete container.dataset.signature;
+    container.textContent = '暂不能执行：' + error.message;
+  }
 }
 function updatePlanEstimate() {
   const run = runById(editingRunId);
@@ -435,6 +534,7 @@ function updatePlanEstimate() {
     ? '允许的兼容备用：' + candidates.map(gptModelLabel).join('、')
     : '本次没有兼容且已授权的备用模型 / 线路。';
   const issues = executionIssues(plan, run.snapshot);
+  requestPreview(run, plan);
   $('agentPlanIssues').textContent = issues.join(' ');
   $('agentPrepareOperation').hidden = !['local', 'crop', 'outpaint'].includes(plan.operation);
   $('agentPrepareOperation').textContent = { local: '划选 / 核对修改区域', crop: '预览裁切范围', outpaint: '设置扩图方向和保留策略' }[plan.operation] || '设置操作范围';
@@ -453,6 +553,11 @@ function updatePlanEstimate() {
   ].join('');
   $('agentPlanAcknowledgeLabel').hidden = !unique.length && !run.requirements?.legacy && !run.requirements?.requiresReview;
   $('agentExecute').textContent = plan.operation === 'crop' ? '预览并确认裁切' : `确认${OPERATIONS[plan.operation] || '生成'} · ${base ? base.name.slice(0, 14) : '新作品'}`;
+  if (run.plan.variationSuggestions?.length) {
+    $('agentPlanSelectedCount').textContent = `已选 ${plan.count} 张；只为勾选的变化创建任务。`;
+    $('agentExecute').disabled = plan.count === 0;
+    if (!plan.count) $('agentExecute').textContent = '请先选择变化细节';
+  }
   $('agentPlanRoute').textContent = `实际入口：${plan.operation === 'crop' ? '浏览器本地' : run.snapshot.refs.length ? '/images/edits' : '/images/generations'}。${plan.operation === 'create' && run.snapshot.refs.length ? '图片仅作参考，不绑定编辑底图。' : ''}镜头、灯光和构图来自 Agent 建议。字形、Logo、选区与主体结构仍需人工核对。`;
 }
 function openPlan(run) {
@@ -475,6 +580,8 @@ function openPlan(run) {
   if (!questioning) {
     const plan = run.plan;
     $('agentPlanPrompt').value = plan.prompt;
+    $('agentPlanVariantAxis').value = plan.variantAxis || '';
+    syncVariantFields(run, plan.count, true);
     $('agentPlanConstraints').value = plan.constraints;
     $('agentPlanOperation').value = plan.operation;
     $('agentPlanExactText').value = plan.exactText || '';
@@ -670,8 +777,8 @@ function renderAgentHistory() {
     ${run.resultIds?.length ? '<button class="btn" data-agent-action="result">查看作品 / 从本版继续</button>' : ''}
     ${run.status === 'failed' ? '<button class="btn" data-agent-action="replan">手动重新规划</button>' : ''}</div></div>
     <details class="agent-execution" ${expanded.has(run.id) ? 'open' : ''}><summary>方案与执行记录</summary><p>${escapeHTML(run.request)}</p><p>${escapeHTML(run.error || run.plan?.summary || '')}</p><p>规划模型：${escapeHTML(run.plannerModel || getAgentConnection().model)} · 规划 ${run.planningUsage?.length || 0} 轮</p>
-    ${run.plan?.decision === 'ready' ? `<p>${escapeHTML(run.plan.model)} · ${escapeHTML(run.plan.size)} · ${escapeHTML(run.plan.quality)} · ${run.plan.count} 张</p><p>${escapeHTML(run.plan.prompt)}</p>` : ''}
-    <ol>${(run.requestLog || []).map((item) => `<li>${escapeHTML(item.model)} · ${escapeHTML({ success: '成功', failed: '失败', unknown: '结果待核实', limited: '限流', unavailable: '不可用，切换候选' }[item.outcome] || '已提交')} · ${item.estimate == null ? '无价格估算' : '预留估算 ' + money(item.estimate, run.currency)}</li>`).join('')}</ol></details></article>`,
+    ${run.plan?.decision === 'ready' ? `<p>${escapeHTML(run.plan.model)} · ${escapeHTML(run.plan.size)} · ${escapeHTML(run.plan.quality)} · ${run.plan.count} 张</p><p>${escapeHTML(run.plan.prompt)}</p>${run.plan.variants?.length ? `<p>变化维度：${escapeHTML(run.plan.variantAxis)}</p>` + run.plan.variants.map((v) => `<p>${escapeHTML(v.label)}：${escapeHTML(v.prompt)}</p>`).join('') : ''}` : ''}
+    <ol>${(run.requestLog || []).map((item) => `<li>${item.variantLabel ? escapeHTML(item.variantLabel) + ' · ' : ''}${escapeHTML(item.model)} · ${escapeHTML({ success: '成功', failed: '失败', unknown: '结果待核实', limited: '限流', unavailable: '不可用，切换候选' }[item.outcome] || '已提交')} · ${item.estimate == null ? '无价格估算' : '预留估算 ' + money(item.estimate, run.currency)}${item.request ? `<details><summary>实际请求 · ${escapeHTML(item.request.path)} · n=${item.request.n}</summary><p>任务：${escapeHTML(item.taskId)} · 方案版本 ${item.planRevision || 1} · 参考 ID：${escapeHTML(item.request.refIds.join('、') || '无')}</p><p class="agent-request-prompt">${escapeHTML(item.prompt || '')}</p></details>` : ''}</li>`).join('')}</ol></details></article>`,
     )
     .join('') || '<p class="agent-history-empty">使用 Agent 提交需求后，方案和执行记录会显示在这里。</p>';
   if (focused?.runId) {
@@ -957,6 +1064,22 @@ export function mountAgent() {
   $('agentPlanDlg').addEventListener('close', () => {
     persist();
   });
+  $('agentPlanExecutionPreview').addEventListener('toggle', () => {
+    if ($('agentPlanDlg').open) updatePlanEstimate();
+  });
+  $('agentPlanSuggestionGroups').onclick = (event) => {
+    const button = event.target.closest('[data-variation-group]');
+    const run = runById(editingRunId);
+    if (!button || !run) return;
+    run.variationGroup = Number(button.dataset.variationGroup);
+    run.variationSelection = [];
+    run.planRevision++;
+    delete run.acknowledgedSignature;
+    $('agentPlanAcknowledge').checked = false;
+    syncVariantFields(run, 0, true);
+    run.plan = formPlan(run);
+    updatePlanEstimate(); persist();
+  };
   $('agentPlanReferences').onclick = guard(async (e) => {
     const id = e.target.closest('[data-detail-reference]')?.dataset.detailReference;
     const run = runById(editingRunId);
@@ -1030,9 +1153,17 @@ export async function continueWithAgent(task) {
   setStatus('已绑定所选版本与该分支保留要求，填写本轮修改后提交 Agent。');
 }
 function importRun(run) {
+  $('agentHistoryDlg').close();
+  $('agentPlanDlg').close();
+  activityOpen = false;
+  renderAgentActivity();
   const draft = structuredClone(run.snapshot);
+  draft.variantAxis = '';
+  draft.variants = '';
   if (run.plan?.decision === 'ready') {
-    const plan = run.plan;
+    let plan;
+    try { plan = normalizePlan(run.plan, run.context); }
+    catch { notify('旧方案未拆分为逐张内容，已恢复原始需求；请重新规划。'); restoreDraft(draft); setComposerMode(true); focusComposer(); return; }
     draft.prompt = [plan.prompt, plan.exactText ? '逐字文案（保留空格、大小写和标点）：\n' + plan.exactText : ''].filter(Boolean).join('\n');
     draft.constraints = plan.constraints;
     draft.settings = {
@@ -1048,11 +1179,13 @@ function importRun(run) {
       ...ref,
       ...plan.referenceRoles.find((r) => r.id === ref.id),
     }));
-    draft.n = plan.count;
+    draft.n = 1;
+    if (plan.variants?.length) {
+      draft.variantAxis = Array.from($('variantAxis').options).some((option) => option.value === plan.variantAxis) ? plan.variantAxis : '自定义方案';
+      draft.variants = plan.variants.map((variant) => variant.prompt.replace(/\s*\n\s*/g, ' ')).join('\n');
+    }
   }
   draft.editQueuedId = null;
-  draft.variantAxis = '';
-  draft.variants = '';
   restoreDraft(draft);
   setComposerMode(false);
   scheduleDraft();

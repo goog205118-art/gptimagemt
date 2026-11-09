@@ -13,6 +13,7 @@ page.setDefaultTimeout(10000);
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
 let imageCalls = 0, providerAttempts = 0, mode = 'normal', lastContext, image;
+const sentPrompts = [];
 await page.route('**/*', async (route) => {
   const request = route.request(), url = new URL(request.url());
   if (url.pathname === '/fixture-seed') return route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Isolated test setup</title>' });
@@ -29,14 +30,27 @@ await page.route('**/*', async (route) => {
       constraints: c.requirements.values.constraints || '', exactText: c.requirements.values.exactText || '',
       operation: mode === 'crop' ? 'crop' : mode === 'local' ? 'local' : mode === 'outpaint' ? 'outpaint' : c.requirements.values.operation || 'create',
       baseId: c.requirements.values.baseId || '', model: 'gpt-image-2', size: mode === 'crop' || mode === 'outpaint' ? '1024x1280' : mode === 'drift' ? '1536x1024' : '1024x1024',
-      count: mode === 'drift' ? 2 : 1, quality: 'medium', format: 'png', background: 'auto',
+      count: mode === 'drift' ? 2 : mode === 'variants' ? 3 : 1, quality: 'medium', format: 'png', background: 'auto',
+      variantAxis: ['drift', 'variants'].includes(mode) ? '光线' : '',
+      variants: mode === 'drift' ? [{ label: '明亮', prompt: '柔和明亮光线' }, { label: '柔暗', prompt: '略微柔暗光线' }] : mode === 'variants' ? c.variation.options.map((prompt, i) => ({ label: ['柔和侧光', '正面漫射', '轮廓补光'][i], prompt })) : [],
       referenceRoles: mode === 'drift' ? roles.map((ref) => ({ ...ref, role: 'style' })) : roles, questions: [],
     };
+    if (mode === 'variants') p.prompt = '单张产品海报，保留主体与英文排版';
+    if (['drift', 'variants'].includes(mode)) {
+      p.contentType = '产品广告海报';
+      p.variationSuggestions = [
+        { axis: '光线', reason: '保留香皂产品与英文排版，通过光向对比产品纹理。', variants: p.variants },
+        { axis: '背景', reason: '仅调整纯色背景明度，让产品继续成为主体。', variants: [{ label: '浅灰背景', prompt: '使用浅灰纯色背景' }, { label: '暖灰背景', prompt: '使用淡暖灰纯色背景' }] },
+      ];
+    }
+    if (mode === 'aggregate') { p.count = 3; p.prompt = '生成三张独立的横版高级产品广告海报，三张分别采用不同背景'; }
     return route.fulfill({ json: { plan: p, usage: { input_tokens: 1 } } });
   }
   if (url.hostname === 'api.openlux.ai' && url.pathname.startsWith('/v1/images/')) {
     imageCalls++;
     providerAttempts++;
+    const data = request.postData() || '';
+    sentPrompts.push({ data, mode });
     if (mode === 'network') return route.abort('connectionreset');
     if (mode === 'gateway') return route.fulfill({ status: 503, json: { error: { code: 'model_not_found' } } });
     if (mode === 'limited' && providerAttempts === 1) return route.fulfill({ status: 429, headers: { 'Retry-After': '1', 'Access-Control-Expose-Headers': 'Retry-After' }, json: { error: { message: 'rate limited' } } });
@@ -80,16 +94,26 @@ async function seed() {
   await page.goto('http://127.0.0.1:4173'); await page.waitForLoadState('networkidle');
   await page.waitForFunction(() => !document.getElementById('genBtn').disabled);
 }
-async function startFromVersion(request, operation = 'normal') {
+async function startFromVersion(request, operation = 'normal', variation = null, sourceId = 'version0') {
   mode = operation;
   providerAttempts = 0;
-  await page.locator('[data-task-id="version0"] .output').click();
+  if (await page.locator('#agentActivityMinimize').isVisible()) await page.locator('#agentActivityMinimize').click();
+  await page.locator(`[data-task-id="${sourceId}"] .output`).click();
   await page.locator('[data-detail-action="agent"]').click();
   await page.locator('#prompt').fill(request);
+  if (variation) await page.evaluate(({ axis, options }) => {
+    const axisField = document.getElementById('variantAxis'); axisField.value = axis; axisField.dispatchEvent(new Event('change', { bubbles: true }));
+    const lines = document.getElementById('variants'); lines.value = options.join('\n'); lines.dispatchEvent(new Event('input', { bubbles: true }));
+  }, variation);
   await page.locator('#genBtn').click();
   await page.locator('#agentActivityReview').waitFor({ state: 'visible' });
   await page.locator('#agentActivityReview').click();
   await page.locator('#agentPlanDlg').waitFor({ state: 'visible' });
+}
+async function requestPreviews(count = 1) {
+  if (!(await page.locator('#agentPlanExecutionPreview').evaluate((el) => el.open))) await page.locator('#agentPlanExecutionPreview > summary').click();
+  await page.waitForFunction((n) => document.querySelectorAll('#agentPlanRequestPreview .agent-request-prompt').length === n, count);
+  return page.locator('#agentPlanRequestPreview .agent-request-prompt').allTextContents();
 }
 try {
   await seed();
@@ -111,10 +135,12 @@ try {
   // A01 deliberately disagree with the user: no requests until the diff is acknowledged.
   await startFromVersion('1 张正方形主图，Logo 保持原样', 'drift');
   assert.match(await page.locator('#agentPlanDifferences').innerText(), /张数/);
+  assert.equal(await page.locator('#agentExecute').isDisabled(), true);
+  await page.locator('#agentPlanVariants input[type=checkbox]').first().check();
   await page.locator('#agentExecute').click();
   assert.match(await page.locator('#agentPlanError').innerText(), /核对/);
   assert.equal(imageCalls, 1);
-  await page.locator('#agentPlanCount').fill('1');
+  assert.equal(await page.locator('#agentPlanCount').inputValue(), '1');
   await page.locator('label[for="agentPlanSize"]').click();
   await page.getByRole('option', { name: '1024x1024', exact: true }).click();
   await page.locator('#agentPlanAcknowledge').check();
@@ -172,12 +198,15 @@ try {
     checks.push({ width, height, ...actual });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
+  const [localPreview] = await requestPreviews();
+  assert.ok(localPreview.includes('Edit only the'));
   if (await page.locator('#agentPlanAcknowledge').isVisible()) await page.locator('#agentPlanAcknowledge').check();
   await page.locator('#agentExecute').click();
-  await waitSaved((s) => s.agentRuns[0]?.status === 'success');
+  state = await waitSaved((s) => s.agentRuns[0]?.status === 'success');
+  assert.equal(state.tasks[0].submittedPrompt, localPreview);
   assert.equal(imageCalls, 2);
   // Outpaint does not submit until the user confirms a layout and preservation policy.
-  await startFromVersion('扩图为 4:5，保留产品和 Logo', 'outpaint');
+  await startFromVersion('扩图为 4:5，保留产品和 Logo', 'outpaint', null, 'version1');
   await page.locator('#agentExecute').click();
   assert.match(await page.locator('#agentPlanError').innerText(), /方向|核对/);
   await page.locator('#agentPrepareOperation').click();
@@ -186,18 +215,20 @@ try {
   state = await saved();
   assert.equal(state.agentRuns[0].snapshot.mask.kind, 'outpaint');
   assert.equal(state.agentRuns[0].snapshot.mask.originalBlob.size > 0, true);
+  const [outpaintPreview] = await requestPreviews();
   if (await page.locator('#agentPlanAcknowledge').isVisible()) await page.locator('#agentPlanAcknowledge').check();
   await page.locator('#agentExecute').click();
   state = await waitSaved((s) => s.agentRuns[0]?.status === 'success');
   assert.equal(imageCalls, 3);
   assert.equal(state.tasks[0].operation, 'outpaint');
+  assert.equal(state.tasks[0].submittedPrompt, outpaintPreview);
   assert.equal(state.tasks[0].outputCheck.issues.length > 0, true); // square provider result is flagged
   // High-detail planning crops remain linked to their source and never replace originals.
   await startFromVersion('背景再亮一点');
   await page.locator('[data-detail-reference]').click();
   await page.locator('#applyEditor').click();
   await page.locator('#agentActivityReview').waitFor({ state: 'visible' });
-  state = await waitSaved((s) => s.agentRuns[0]?.detailReferences?.length === 1 && s.agentRuns[0].status === 'review');
+  state = await waitSaved((s) => s.agentRuns[0]?.detailReferences?.length === 1 && s.agentRuns[0].status === 'review' && s.agentRuns[0].planningUsage?.length >= 2);
   assert.equal(state.agentRuns[0].detailReferences[0].parentId, state.agentRuns[0].snapshot.refs[0].id);
   assert.equal(lastContext.detailReferences.length, 1);
   assert.equal(imageCalls, 3);
@@ -246,9 +277,103 @@ try {
   assert.equal(imageCalls, callsAtFailure);
   await page.locator('[data-close="agentPlanDlg"]').click();
   await page.locator('#agentActivity [data-agent-action="stop"]').click();
+  // Regression: one common brief plus one delta per paid request, never the whole batch.
+  const choices = ['柔和左侧光', '正面漫射光', '轻微轮廓补光'];
+  await startFromVersion('保留 Logo，做三张光线变体', 'variants', { axis: '光线', options: choices });
+  assert.equal(lastContext.variation.axis, '光线');
+  assert.deepEqual(lastContext.variation.options, choices);
+  assert.equal(await page.locator('#agentPlanVariants .agent-variant').count(), 3);
+  assert.match(await page.locator('#agentPlanSuggestionType').innerText(), /产品广告海报/);
+  assert.match(await page.locator('#agentPlanSuggestionReason').innerText(), /纹理/);
+  assert.equal(await page.locator('#agentExecute').isDisabled(), true);
+  assert.equal(imageCalls, callsAtFailure);
+  await page.locator('#agentPlanDlg .preset-dialog-body').evaluate((el) => { el.scrollTop = 0; });
+  await page.screenshot({ path: `${out}/variant-recommendations.png` });
+  await page.locator('[data-variation-group="1"]').click();
+  assert.match(await page.locator('#agentPlanSuggestionReason').innerText(), /背景明度/);
+  await page.locator('#agentPlanVariants input[type=checkbox]').first().check();
+  assert.equal(await page.locator('#agentPlanCount').inputValue(), '1');
+  await page.locator('[data-variation-group="0"]').click();
+  assert.equal(await page.locator('#agentPlanCount').inputValue(), '0');
+  assert.equal(await page.locator('#agentExecute').isDisabled(), true);
+  for (const box of await page.locator('#agentPlanVariants input[type=checkbox]').all()) await box.check();
+  await requestPreviews(3);
+  assert.match(await page.locator('#agentPlanRequestPreview').textContent(), /3 个请求，每个请求 n=1/);
+  const previewPrompts = await page.locator('#agentPlanRequestPreview .agent-request-prompt').allTextContents();
+  previewPrompts.forEach((prompt, i) => {
+    assert.ok(prompt.includes(choices[i]));
+    choices.forEach((other, j) => { if (i !== j) assert.ok(!prompt.includes(other)); });
+  });
+  await page.locator('#agentPlanVariation').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.screenshot({ path: `${out}/variants-desktop.png` });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#agentPlanVariation').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.screenshot({ path: `${out}/variants-mobile.png` });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const callsBeforeVariants = imageCalls;
+  await page.locator('#agentExecute').click();
+  state = await waitSaved((s) => s.agentRuns[0]?.status === 'success');
+  const variantRun = state.agentRuns[0];
+  const variantTasks = state.tasks.filter((task) => task.agentRunId === variantRun.id).sort((a, b) => a.variantIndex - b.variantIndex);
+  assert.equal(imageCalls - callsBeforeVariants, 3);
+  assert.equal(variantTasks.length, 3);
+  variantTasks.forEach((task, i) => {
+    assert.equal(task.variant, choices[i]);
+    assert.equal(task.submittedPrompt, previewPrompts[i]);
+    assert.equal(task.requestSummary.n, 1);
+    assert.ok(!task.submittedPrompt.includes('生成三张'));
+    assert.ok(sentPrompts.filter((item) => item.mode === 'variants').some((item) => item.data.includes(choices[i])));
+    const record = variantRun.requestLog.find((item) => item.taskId === task.id);
+    assert.equal(record.prompt, task.submittedPrompt);
+    assert.equal(record.variantLabel, task.variantLabel);
+    assert.equal(record.request.n, 1);
+  });
+  await page.locator('#agentActivityBtn').click();
+  if (!(await page.locator('#agentHistoryDlg').isVisible())) await page.locator('#agentActivityHistory').click();
+  const record = page.locator(`#agentHistoryList [data-agent-run="${variantRun.id}"]`);
+  await record.locator('[data-agent-action="import"]').click();
+  assert.equal(await page.locator('#agentHistoryDlg').isVisible(), false);
+  assert.equal(await page.locator('#n').inputValue(), '1');
+  assert.equal(await page.locator('#variantAxis').inputValue(), '光线');
+  assert.deepEqual((await page.locator('#variants').inputValue()).split('\n'), choices);
+  assert.ok(!(await page.locator('#prompt').inputValue()).includes('生成三张'));
+  await page.locator('#agentModeBtn').click();
+  await page.locator('#agentSettingsBtn').click();
+  await page.locator('#agentAutomatic').check();
+  await page.locator('#agentSettingsForm button[type=submit]').click();
+  await startFromVersion('保留 Logo，推荐光线变体', 'variants', { axis: '光线', options: choices });
+  state = await saved();
+  assert.match(state.agentRuns[0].error, /选择/);
+  assert.equal(imageCalls, callsBeforeVariants + 3);
+  await page.locator('[data-variation-group="1"]').click();
+  await page.locator('#agentPlanVariants input[type=checkbox]').last().check();
+  assert.equal(await page.locator('#agentPlanCount').inputValue(), '1');
+  await page.locator('[data-close="agentPlanDlg"]').click();
+  await page.locator('#agentActivityReview').click();
+  assert.equal(await page.locator('#agentPlanVariants input[type=checkbox]').last().isChecked(), true);
+  assert.equal(await page.locator('#agentPlanCount').inputValue(), '1');
+  if (await page.locator('#agentPlanAcknowledge').isVisible()) await page.locator('#agentPlanAcknowledge').check();
+  await page.locator('#agentExecute').click();
+  state = await waitSaved((s) => s.agentRuns[0]?.status === 'success');
+  const chosenTasks = state.tasks.filter((task) => task.agentRunId === state.agentRuns[0].id);
+  assert.equal(chosenTasks.length, 1);
+  assert.equal(chosenTasks[0].variant, '使用淡暖灰纯色背景');
+  assert.equal(chosenTasks[0].variantAxis, '背景');
+  assert.equal(imageCalls, callsBeforeVariants + 4);
+  // Old or malformed planner output is stopped with a reason; zero image requests.
+  mode = 'aggregate';
+  if (await page.locator('#agentActivityMinimize').isVisible()) await page.locator('#agentActivityMinimize').click();
+  await page.locator('[data-task-id="version0"] .output').click();
+  await page.locator('[data-detail-action="agent"]').click();
+  await page.locator('#prompt').fill('做三张变体');
+  await page.locator('#genBtn').click();
+  state = await waitSaved((s) => s.agentRuns[0]?.status === 'failed');
+  assert.match(state.agentRuns[0].error, /整批/);
+  assert.equal(imageCalls, callsBeforeVariants + 4);
   assert.equal(errors.length, 0, errors.join('\n'));
-  await writeFile(`${out}/report.json`, JSON.stringify({ imageCalls, errors, checks, passed: ['version lineage', 'fixed approval', 'single double-click submission', 'intent conflict gate', 'confirmation invalidation', 'retained form', 'stable gallery layout', 'keyboard collapse and focus', 'zero-request crop', 'mask workflow', 'responsive dialog', 'outpaint layout and output mismatch', 'high-detail reference planning', '429 shared budget', 'explicit rejection fallback', 'ambiguous 503 no retry', 'network failure and refresh', 'legacy backup import and continuation'] }, null, 2));
-  console.log('Browser integration passed; all provider responses mocked.');
+  await writeFile(`${out}/report.json`, JSON.stringify({ imageCalls, errors, checks, passed: ['version lineage', 'fixed approval', 'single double-click submission', 'intent conflict gate', 'confirmation invalidation', 'retained form', 'stable gallery layout', 'keyboard collapse and focus', 'zero-request crop', 'mask workflow', 'responsive dialog', 'outpaint layout and output mismatch', 'high-detail reference planning', '429 shared budget', 'explicit rejection fallback', 'ambiguous 503 no retry', 'network failure and refresh', 'legacy backup import and continuation', 'isolated variant prompts', 'preview matches actual requests', 'aggregate instruction blocked', 'manual import keeps one image per variant', 'content-aware recommendations require selection', 'one selected suggestion produces one image', 'mask and outpaint preview matches request', 'automatic mode waits for variant selection'] }, null, 2));
+  console.log('Browser integration passed, including isolated variant prompts and request transparency; all provider responses mocked.');
 } catch (error) {
   await page.screenshot({ path: `${out}/failure.png` });
   console.error('Browser state:', await page.locator('body').innerText(), errors);
