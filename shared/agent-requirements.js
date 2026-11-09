@@ -11,6 +11,7 @@ export function captureRequirements(snapshot, request, inherited = null) {
   for (const key of ['constraints', 'exactText'])
     if (inherited?.values?.[key]) set(key, inherited.values[key], { kind: 'version', versionId: snapshot.parentId, original: inherited.sources?.[key] });
   if (snapshot.constraints?.trim()) set('constraints', snapshot.constraints.trim(), { kind: 'user', text: snapshot.constraints });
+  if (snapshot.exactText) set('exactText', snapshot.exactText, { kind: 'user', text: snapshot.exactText });
   const explicit = (key, value) => set(key, value, { kind: 'request', text: request });
   if (snapshot.variantAxis) set('variantAxis', snapshot.variantAxis, { kind: 'user', text: snapshot.variantAxis });
   const count = request.match(/(\d+|[一二两三四五六七八九])\s*张/);
@@ -100,7 +101,7 @@ export function executionIssues(plan, snapshot) {
 }
 
 export function planSignature(plan) {
-  return JSON.stringify(['operation', 'baseId', 'prompt', 'constraints', 'exactText', 'model', 'size', 'quality', 'format', 'background', 'count', 'referenceRoles', 'variantAxis', 'variants'].map((key) => plan[key] ?? null));
+  return JSON.stringify(['operation', 'baseId', 'prompt', 'constraints', 'exactText', 'model', 'size', 'quality', 'format', 'background', 'count', 'referenceRoles', 'variantAxis', 'variants', 'variantPromptMode'].map((key) => plan[key] ?? null));
 }
 
 export function confirmedRequirements(run, plan) {

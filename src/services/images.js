@@ -9,6 +9,7 @@ import {
   outpaintPrompt,
 } from '../features/outpaint.js';
 import { state } from '../core/state.js';
+import { assertSingleImagePrompt } from '../../shared/agent-variants.js';
 async function validateGptMask(t) {
   if (!t.mask) return null;
   if (!t.refs[0] || t.mask.assetId !== t.refs[0].id)
@@ -152,6 +153,7 @@ async function prepareGptRequest(t, formatFieldOverride = null) {
     size: s.size,
     quality: s.quality,
   };
+  if (t.agentRunId || t.variant || t.variantCount > 1 || t.variantPromptMode === 'complete') assertSingleImagePrompt(params.prompt);
   if (p.v2 || p.v25) params.response_format = 'b64_json';
   if (params.prompt.length > p.maxPrompt)
     throw new Error(

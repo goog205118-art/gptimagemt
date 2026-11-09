@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import agent from '../api/agent.js';
 import {
   buildPlannerBody,
+  buildVariantPromptBody,
   extractPlanOutput,
   normalizePlan,
   recoverableRejection,
@@ -262,6 +263,41 @@ test('proxy validates the plan structure before returning it to the browser', as
   globalThis.fetch = async () => Response.json({ status: 'completed', output_text: JSON.stringify({ ...plan, count: 99 }) });
   const response = await post({ action: 'plan', origin: 'https://api.openlux.ai', context });
   assert.equal(response.status, 502);
+});
+
+test('variant prompt writer uses a separate schema and returns only selected complete prompts', async () => {
+  const context = { request: '创作3张独立产品海报', maxPrompt: 32000, brief: { variantAxis: '背景', variants: [{ label: '浅灰', prompt: '浅灰纯色背景' }, { label: '暖灰', prompt: '暖灰纯色背景' }] } };
+  const variants = context.brief.variants.map((v) => ({ label: v.label, prompt: `横版产品广告海报，保留产品与英文排版，${v.prompt}` }));
+  const body = buildVariantPromptBody({ context });
+  assert.equal(body.text.format.name, 'independent_image_prompts');
+  assert.deepEqual(body.text.format.schema.required, ['variants']);
+  assert.ok(body.instructions.includes('不会再前置共同 prompt'));
+  let calls = 0;
+  globalThis.fetch = async (url, init) => {
+    calls++;
+    assert.equal(url, 'https://api.openlux.ai/v1/responses');
+    assert.equal(JSON.parse(init.body).text.format.name, 'independent_image_prompts');
+    return Response.json({ status: 'completed', output_text: JSON.stringify({ variants }) });
+  };
+  const response = await post({ action: 'variants', origin: 'https://api.openlux.ai', context });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).plan, { variants });
+  assert.equal(calls, 1);
+});
+
+test('variant writer rejects invalid selections before fetch and unsafe model output without retries', async () => {
+  const context = { maxPrompt: 32000, brief: { variantAxis: '背景', variants: [{ label: '浅灰', prompt: '浅灰纯色背景' }] } };
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return Response.json({ status: 'completed', output_text: JSON.stringify({ variants: [{ label: '浅灰', prompt: '创作3张独立横版高端消费电子产品海报，不要拼成一张' }] }) });
+  };
+  assert.equal((await post({ action: 'variants', origin: 'https://api.openlux.ai', context: { ...context, brief: { ...context.brief, variants: [] } } })).status, 400);
+  assert.equal(calls, 0);
+  const response = await post({ action: 'variants', origin: 'https://api.openlux.ai', context });
+  assert.equal(response.status, 502);
+  assert.match((await response.json()).message, /整批/);
+  assert.equal(calls, 1);
 });
 test('only linked detail previews use high detail, originals retain low-detail previews', () => {
   const preview = 'data:image/jpeg;base64,YQ==';

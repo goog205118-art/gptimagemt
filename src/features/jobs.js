@@ -99,6 +99,7 @@ async function submit() {
     settings,
     refs: copyRefs(state.refs),
     constraints: $('constraints').value.trim(),
+    exactText: $('exactText').value,
     parentId: state.parentId,
     rootId: taskById(state.parentId)?.rootId || state.parentId || null,
     projectId: $('draftProject').value || 'default',
@@ -147,6 +148,7 @@ async function submit() {
       for (const variant of variants)
         for (let i = 0; i < n; i++) {
           const id = uid();
+          const complete = $('variantAxis').value && $('variantPromptMode').value === 'complete';
           const t = {
             ...base,
             id,
@@ -160,7 +162,9 @@ async function submit() {
             queueOrder: ++runtime.queueCounter,
             batchId,
             batchName: prompt.slice(0, 40),
-            variant,
+            prompt: complete ? variant : base.prompt,
+            variant: complete ? '' : variant,
+            variantPromptMode: complete ? 'complete' : 'delta',
             variantAxis: $('variantAxis').value,
             variantCount: variants.length,
             attempts: 0,
@@ -191,6 +195,7 @@ async function submit() {
 }
 async function enqueueAgentTasks(run, plan, settings, refs) {
   if (!state.key) throw new Error('请先连接生图 API。');
+  if (plan.variants?.length && plan.variantPromptMode !== 'complete') throw new Error('变体尚未编写为完整独立提示词，请先让 AI 编写并确认。');
   const imageSpecs = agentImageSpecs(plan);
   const approvedKey = state.key,
     approvedBase = state.base;

@@ -4,7 +4,7 @@ import { persist, storageSet } from '../core/storage.js';
 import { uid, escapeHTML } from '../core/utils.js';
 import { ROLE_NAMES } from '../core/config.js';
 import { AGENT_MODEL, AGENT_STATUSES, normalizePlan } from '../../shared/agent-protocol.js';
-import { agentImageSpecs } from '../../shared/agent-variants.js';
+import { agentImageSpecs, variantBrief, normalizeCompiledVariants } from '../../shared/agent-variants.js';
 import { prepareGptRequest } from '../services/images.js';
 import {
   AGENT_CONNECTION_KEY,
@@ -178,6 +178,8 @@ function validateExecution(run, plan, automatic = false) {
   const normalized = normalizePlan(plan, run.context);
   if (plan.variationSuggestions?.length && !run.variationSelection?.length)
     throw new Error('请先选择 AI 推荐的变化维度和细节，再确认生成。');
+  if (normalized.variants.length && normalized.variantPromptMode !== 'complete')
+    throw new Error('请先让 AI 编写每张完整提示词，核对后再生成。');
   if ((run.planConflicts?.length || run.requirements?.legacy || run.requirements?.requiresReview || requirementConflicts(normalized, run.requirements).length) && run.acknowledgedSignature !== planSignature(normalized))
     throw new Error('方案与用户要求或继承项有差异，请核对并确认变更。');
   const issues = executionIssues(normalized, run.snapshot);
@@ -265,6 +267,7 @@ async function planRun(run) {
       originalConstraints: run.snapshot.constraints,
       currentSettings: run.snapshot.settings,
       variationRecommendationsRequired: true,
+      independentVariantPrompts: true,
       variation: {
         axis: run.snapshot.variantAxis || '',
         options: (run.snapshot.variants || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
@@ -281,6 +284,8 @@ async function planRun(run) {
       maxRequests: run.maxRequests,
       questionsRemaining: Math.max(0, 2 - run.rounds),
       answers: run.answers,
+      variationFeedback: run.variationFeedback || '',
+      priorPlan: run.variationFeedback ? run.plan : undefined,
       requirements: run.requirements,
       selectedVersionId: run.snapshot.parentId || null,
     };
@@ -308,16 +313,18 @@ async function planRun(run) {
     delete run.variationGroup;
     delete run.variationSelection;
     delete run.variantDrafts;
+    delete run.variantCompilation;
     run.planRevision = (run.planRevision || 0) + 1;
     run.planConflicts = run.plan.decision === 'ready' ? requirementConflicts(run.plan, run.requirements) : [];
     // Keep the user text intact on the card. Model wording remains an attributed suggestion.
     if (run.plan.decision === 'ready') {
+      run.plan.variantPromptMode = run.plan.variants.length || run.plan.variationSuggestions.length ? 'brief' : 'delta';
       run.suggestions = { constraints: run.plan.constraints, summary: run.plan.summary };
       run.plan.constraints = run.requirements?.values.constraints || run.plan.constraints;
       run.plan.exactText = run.requirements?.values.exactText || run.plan.exactText;
     }
     run.status = run.plan.decision === 'clarify' ? 'questions' : 'review';
-    if (run.status === 'review') planTask(run, run.plan);
+    if (run.status === 'review' && run.plan.variantPromptMode !== 'brief') planTask(run, run.plan);
     if (state.base !== imageBase || state.key !== imageKey)
       throw new Error('生图连接已变化，方案已停止，请重新规划。');
     if (run.status === 'review' && options().automatic) {
@@ -356,6 +363,7 @@ export async function startAgentPlan() {
     request,
     settings: snapshot.settings,
     constraints: snapshot.constraints,
+    exactText: snapshot.exactText,
     variantAxis: snapshot.variantAxis,
     variants: snapshot.variants,
     refs: snapshot.refs.map(({ id, role, note }) => ({ id, role, note })),
@@ -454,6 +462,7 @@ function formPlan(run) {
     count,
     variantAxis: variants.length ? $('agentPlanVariantAxis').value : '',
     variants,
+    variantPromptMode: variants.length ? 'brief' : 'delta',
     prompt: $('agentPlanPrompt').value,
     constraints: $('agentPlanConstraints').value,
     operation: $('agentPlanOperation').value,
@@ -465,6 +474,97 @@ function formPlan(run) {
       id: row.dataset.planRef, role: row.querySelector('select').value, note: row.querySelector('input').value,
     })),
   };
+}
+function compilationSignature(run, plan) {
+  return JSON.stringify(variantBrief(plan, run.variantStyleNotes || ''));
+}
+function compilationCurrent(run, plan) {
+  return !!plan.variants.length && run.variantCompilation?.signature === compilationSignature(run, plan);
+}
+function executablePlan(run, plan) {
+  if (!plan.variants.length) return plan;
+  if (plan.variantPromptMode === 'complete' && run.approval?.signature === planSignature(plan)) return plan;
+  if (!compilationCurrent(run, plan)) throw new Error('请先让 AI 编写当前选择的每张完整提示词，核对后再生成。');
+  return { ...plan, variants: run.variantCompilation.variants, variantPromptMode: 'complete' };
+}
+function renderCompiledVariants(run, plan) {
+  const section = $('agentCompiledSection'), list = $('agentCompiledVariants');
+  const compilation = run.variantCompilation;
+  section.hidden = !compilation;
+  if (!compilation) { list.replaceChildren(); delete list.dataset.compilation; return; }
+  const current = compilationCurrent(run, plan);
+  $('agentCompiledStatus').textContent = current
+    ? 'AI 已按你的选择编写。每张独立发送，下方可编辑；尚未发起生图。'
+    : '方向、简报或参数已改变，请重新编写提示词后再生成。';
+  const key = `${run.id}:${compilation.at}`;
+  if (list.dataset.compilation !== key) {
+    list.dataset.compilation = key;
+    list.innerHTML = compilation.variants.map((v, i) => `<label class="agent-variant">${escapeHTML(v.label)}<textarea class="agent-complete-prompt" data-compiled-prompt="${i}" aria-label="${escapeHTML(v.label)}完整提示词" rows="5" maxlength="4000">${escapeHTML(v.prompt)}</textarea></label>`).join('');
+  }
+  list.querySelectorAll('textarea').forEach((input) => { input.disabled = !current; });
+}
+async function compileVariantPrompts(run, plan) {
+  if (planners.has(run.id)) return;
+  const normalized = normalizePlan(plan, run.context);
+  if (!normalized.variants.length) throw new Error('请先选择至少一个变化细节。');
+  const controller = new AbortController(), signature = compilationSignature(run, plan);
+  const brief = variantBrief(normalized, run.variantStyleNotes || '');
+  const imageBase = state.base, imageKey = state.key;
+  // Only use the brief to calculate program-added overhead; it is never an executable spec.
+  const sharedTask = {
+    prompt: '', variant: '', variantPromptMode: 'complete', constraints: normalized.constraints,
+    exactText: normalized.exactText, mask: run.snapshot.mask,
+    refs: run.snapshot.refs.map((ref) => ({ ...ref, ...normalized.referenceRoles.find((role) => role.id === ref.id) })),
+  };
+  const overhead = effectivePrompt({ ...sharedTask, prompt: '', variant: '', variantPromptMode: 'complete' }).length;
+  const maxPrompt = Math.min(4000, run.context.availableModels.find((model) => model.id === plan.model).maxPrompt - overhead - 4);
+  if (maxPrompt < 1) throw new Error('保留要求和参考说明已占满提示词限制，请缩短后再编写。');
+  const context = {
+    request: run.request, answers: run.answers, brief,
+    references: run.context.references,
+    maxPrompt,
+  };
+  const credentials = agentCredentials();
+  planners.set(run.id, controller);
+  run.variantWriting = true;
+  delete run.variantCompilation;
+  $('agentPlanFields').inert = true;
+  $('agentExecute').textContent = 'AI 正在编写独立提示词…';
+  render();
+  const timer = setTimeout(() => controller.abort(), 115000);
+  try {
+    if (!(await persist())) throw new Error('编写状态未能保存，请检查浏览器存储后重试。');
+    const previews = await referencePreviews(run.snapshot.refs, controller.signal);
+    const data = await agentQuery('variants', { context, previews }, controller.signal, {
+      ...credentials, useImageKey: false, apiKey: credentials.key,
+    });
+    controller.signal.throwIfAborted();
+    if (run.stopped) return;
+    run.planningUsage.push({ phase: 'variants', at: Date.now(), usage: data.usage });
+    if (state.base !== imageBase || state.key !== imageKey) throw new Error('生图连接已变化，请重新编写并确认。');
+    if (signature !== compilationSignature(run, run.plan)) throw new Error('变体方向已变化，请按当前选择重新编写。');
+    const variants = normalizeCompiledVariants(data.plan, context);
+    const complete = { ...normalized, variants, variantPromptMode: 'complete' };
+    planTask(run, complete);
+    run.variantCompilation = { signature, variants, brief, at: Date.now(), model: credentials.model };
+    run.planRevision++;
+    delete run.acknowledgedSignature;
+    $('agentPlanAcknowledge').checked = false;
+    run.error = '';
+    if (editingRunId === run.id && $('agentPlanDlg').open) {
+      renderCompiledVariants(run, plan);
+      $('agentCompiledSection').scrollIntoView({ block: 'start', behavior: 'instant' });
+    }
+  } catch (error) {
+    run.error = controller.signal.aborted ? '提示词编写已停止，可能产生文本用量；没有发起生图，可手动重新编写。' : `提示词编写未通过：${error.message} 尚未发起生图；文本请求可能已计费，不会自动重试。`;
+    throw new Error(run.error);
+  } finally {
+    clearTimeout(timer);
+    planners.delete(run.id);
+    delete run.variantWriting;
+    if (editingRunId === run.id) { $('agentPlanFields').inert = false; updatePlanEstimate(); }
+    render(); await persist();
+  }
 }
 function syncVariantFields(run, count, reset = false) {
   const panel = $('agentPlanVariation');
@@ -503,6 +603,7 @@ async function requestPreview(run, plan) {
   let signature;
   try {
     if (plan.variationSuggestions?.length && !plan.count) throw new Error('请先勾选至少一个变化细节。');
+    plan = executablePlan(run, plan);
     const task = planTask(run, plan);
     const route = plan.operation === 'crop' ? '本地处理' : task.refs.length ? 'POST /images/edits' : 'POST /images/generations';
     const specs = agentImageSpecs(plan);
@@ -510,7 +611,7 @@ async function requestPreview(run, plan) {
     signature = JSON.stringify([run.id, planSignature(plan), task.refs.map((ref) => ref.id), run.planRevision, expanded]);
     if (container.dataset.signature === signature) return;
     container.dataset.signature = signature;
-    const overview = `<p>${plan.operation === 'crop' ? '不发送生图请求。' : `程序将拆为 ${specs.length} 个请求，每个请求 n=1。首次生成共 ${specs.length} 张；重试与回退共用 ${run.maxRequests} 次请求上限。`}<br>${escapeHTML(route)} · ${escapeHTML(plan.model)} · ${escapeHTML(plan.size)} · ${escapeHTML(plan.format)}</p><p>参考顺序：${escapeHTML(task.refs.map((ref, i) => `图 ${i + 1}：${ref.name}（${ROLE_NAMES[ref.role]}，${ref.id}）`).join('；') || '无参考图')}。</p>`;
+    const overview = `<p>${plan.operation === 'crop' ? '不发送生图请求。' : `程序将拆为 ${specs.length} 个请求，每个请求 n=1。首次生成共 ${specs.length} 张；重试与回退共用 ${run.maxRequests} 次请求上限。`}<br>${escapeHTML(route)} · ${escapeHTML(plan.model)} · ${escapeHTML(plan.size)} · ${escapeHTML(plan.format)}</p>${plan.variantPromptMode === 'complete' ? `<p>提示词来源：${escapeHTML(run.variantCompilation.model)} 逐张编写，经你确认后发送；共同简报和原始批次需求不会前置。</p>` : ''}<p>参考顺序：${escapeHTML(task.refs.map((ref, i) => `图 ${i + 1}：${ref.name}（${ROLE_NAMES[ref.role]}，${ref.id}）`).join('；') || '无参考图')}。</p>`;
     container.innerHTML = overview;
     if (!expanded || plan.operation === 'crop') return;
     const prepared = await Promise.all(specs.map((spec) => prepareGptRequest({ ...task, ...spec, effectivePrompt: effectivePrompt({ ...task, ...spec }) })));
@@ -529,11 +630,13 @@ function updatePlanEstimate() {
     price = planPrice(run, plan);
   $('agentPlanEstimate').textContent =
     plan.operation === 'crop' ? '本地裁切 · 0 次生图请求 · 不产生生图费用。确认范围后保存为新版本。' : `${plan.count} 张 · ${price === null ? '未填写单价，无法估价' : '首次生成估算 ' + money(price * plan.count, run.currency)} · 最多 ${run.maxRequests} 次请求${run.costLimit === null ? '；不自动重试' : '，估算上限 ' + money(run.costLimit, run.currency)}。规划文本费用另计。`;
-  const candidates = plan.operation === 'crop' ? [] : compatibleCandidates(run, plan);
-  $('agentPlanFallbacks').textContent = candidates.length
+  const compiled = compilationCurrent(run, plan);
+  const candidates = plan.operation === 'crop' ? [] : compatibleCandidates(run, compiled ? executablePlan(run, plan) : plan);
+  $('agentPlanFallbacks').textContent = plan.variants.length && !compiled ? '完整提示词编写后，再核对兼容的备用模型 / 线路。' : candidates.length
     ? '允许的兼容备用：' + candidates.map(gptModelLabel).join('、')
     : '本次没有兼容且已授权的备用模型 / 线路。';
   const issues = executionIssues(plan, run.snapshot);
+  renderCompiledVariants(run, plan);
   requestPreview(run, plan);
   $('agentPlanIssues').textContent = issues.join(' ');
   $('agentPrepareOperation').hidden = !['local', 'crop', 'outpaint'].includes(plan.operation);
@@ -544,7 +647,8 @@ function updatePlanEstimate() {
     preview.dataset.baseId = base?.id || '';
     preview.innerHTML = base ? `<img src="${escapeHTML(referenceURL(base))}" alt="本轮指定底图"><div><strong>${escapeHTML(base.name)}</strong><p>版本：${escapeHTML(base.versionId || run.snapshot.parentId || '导入素材')}<br>原图保留，结果创建新版本。</p></div>` : '<p>新建作品 · 参考图按各自用途参与创作。</p>';
   }
-  const conflicts = [...(run.planConflicts || []), ...requirementConflicts(plan, run.requirements)];
+  const reviewedPlan = compilationCurrent(run, plan) ? executablePlan(run, plan) : plan;
+  const conflicts = [...(run.planConflicts || []), ...requirementConflicts(reviewedPlan, run.requirements)];
   const unique = [...new Map(conflicts.map((item) => [item.field + JSON.stringify(item.actual), item])).values()];
   $('agentPlanDifferences').innerHTML = [
     run.requirements?.legacy ? '<p>旧作品缺少已确认要求记录，请核对保留项和必要参考。</p>' : '',
@@ -558,6 +662,11 @@ function updatePlanEstimate() {
     $('agentExecute').disabled = plan.count === 0;
     if (!plan.count) $('agentExecute').textContent = '请先选择变化细节';
   }
+  if (plan.variants.length) {
+    $('agentExecute').textContent = compilationCurrent(run, plan) ? `确认生成 ${plan.count} 张独立图片` : `让 AI 编写 ${plan.count} 张提示词`;
+    $('agentExecute').disabled = !!run.variantWriting;
+  }
+  if (run.variantWriting) { $('agentExecute').disabled = true; $('agentExecute').textContent = 'AI 正在编写独立提示词…'; }
   $('agentPlanRoute').textContent = `实际入口：${plan.operation === 'crop' ? '浏览器本地' : run.snapshot.refs.length ? '/images/edits' : '/images/generations'}。${plan.operation === 'create' && run.snapshot.refs.length ? '图片仅作参考，不绑定编辑底图。' : ''}镜头、灯光和构图来自 Agent 建议。字形、Logo、选区与主体结构仍需人工核对。`;
 }
 function openPlan(run) {
@@ -570,6 +679,7 @@ function openPlan(run) {
   $('agentPlanAcknowledge').checked = false;
   $('agentPlanBasePreview').dataset.baseId = 'refresh';
   $('agentPlanFields').hidden = questioning;
+  $('agentPlanFields').inert = !!run.variantWriting;
   $('agentQuestions').hidden = !questioning;
   $('agentQuestions').innerHTML = questioning ? questionFields(run) : '';
   $('agentImportPlan').hidden = false;
@@ -580,6 +690,7 @@ function openPlan(run) {
   if (!questioning) {
     const plan = run.plan;
     $('agentPlanPrompt').value = plan.prompt;
+    $('agentPlanStyleNotes').value = run.variantStyleNotes || '';
     $('agentPlanVariantAxis').value = plan.variantAxis || '';
     syncVariantFields(run, plan.count, true);
     $('agentPlanConstraints').value = plan.constraints;
@@ -694,16 +805,16 @@ function renderAgentActivity() {
   if (!activityOpen) return;
 
   panel.dataset.agentRun = run.id;
-  $('agentActivitySpinner').hidden = !inProgress(run);
+  $('agentActivitySpinner').hidden = !inProgress(run) && !run.variantWriting;
   const review = $('agentActivityReview');
   if (!needsInput(run) && document.activeElement === review)
     $('agentActivityMinimize').focus({ preventScroll: true });
-  review.hidden = !needsInput(run);
+  review.hidden = !needsInput(run) || !!run.variantWriting;
   review.textContent = run.status === 'questions' ? '补充需求' : '确认方案';
   const description = {
-    planning: '正在分析你的需求，准备创作方案。',
+    planning: '正在结合内容和你的回答，讨论创作方向。',
     questions: '补充几个关键点后，Agent 会继续规划。',
-    review: run.plan?.summary || '方案已准备好，请确认后开始生成。',
+    review: run.variantWriting ? '正在将所选细节编写成每张完整提示词；尚未生图。' : run.plan?.summary || '方案已准备好，请确认后开始生成。',
     running: `${gptModelLabel(run.plan?.model || run.snapshot.settings.model)} · ${run.requests || 0}/${run.maxRequests} 次生图请求`,
     queued: '方案已确认，等待队列提交。',
     checking: '正在核对文件、尺寸和格式；创作效果待人工核对。',
@@ -711,7 +822,7 @@ function renderAgentActivity() {
     unknown: '已有请求的结果需要核实；可查看记录和已成功作品，不会自动重发。',
   };
   for (const [id, value] of [
-    ['agentActivityStatus', AGENT_STATUSES[run.status]],
+    ['agentActivityStatus', run.variantWriting ? '编写提示词中' : AGENT_STATUSES[run.status]],
     ['agentActivityDescription', run.error || description[run.status]],
     ['agentActivityRequest', run.request],
   ]) {
@@ -743,6 +854,7 @@ function renderAgentHistory() {
       r.requests,
       r.usedEstimate,
       r.plan?.summary,
+      r.planRevision, r.planningUsage?.length, r.variantWriting,
       r.requestLog?.map((item) => item.outcome),
     ]),
   );
@@ -776,7 +888,7 @@ function renderAgentHistory() {
     ${run.status !== 'planning' ? '<button class="btn" data-agent-action="import">导入输入框</button>' : ''}
     ${run.resultIds?.length ? '<button class="btn" data-agent-action="result">查看作品 / 从本版继续</button>' : ''}
     ${run.status === 'failed' ? '<button class="btn" data-agent-action="replan">手动重新规划</button>' : ''}</div></div>
-    <details class="agent-execution" ${expanded.has(run.id) ? 'open' : ''}><summary>方案与执行记录</summary><p>${escapeHTML(run.request)}</p><p>${escapeHTML(run.error || run.plan?.summary || '')}</p><p>规划模型：${escapeHTML(run.plannerModel || getAgentConnection().model)} · 规划 ${run.planningUsage?.length || 0} 轮</p>
+    <details class="agent-execution" ${expanded.has(run.id) ? 'open' : ''}><summary>方案与执行记录</summary><p>${escapeHTML(run.request)}</p><p>${escapeHTML(run.error || run.plan?.summary || '')}</p><p>规划模型：${escapeHTML(run.plannerModel || getAgentConnection().model)} · 方向规划 ${(run.planningUsage || []).filter((item) => item.phase !== 'variants').length} 次 · 独立提示词编写 ${(run.planningUsage || []).filter((item) => item.phase === 'variants').length} 次</p>${run.variantStyleNotes ? `<p>变体偏好：${escapeHTML(run.variantStyleNotes)}</p>` : ''}${run.answers.map((item) => `<p>${escapeHTML(item.question)}：${escapeHTML(item.answer)}</p>`).join('')}
     ${run.plan?.decision === 'ready' ? `<p>${escapeHTML(run.plan.model)} · ${escapeHTML(run.plan.size)} · ${escapeHTML(run.plan.quality)} · ${run.plan.count} 张</p><p>${escapeHTML(run.plan.prompt)}</p>${run.plan.variants?.length ? `<p>变化维度：${escapeHTML(run.plan.variantAxis)}</p>` + run.plan.variants.map((v) => `<p>${escapeHTML(v.label)}：${escapeHTML(v.prompt)}</p>`).join('') : ''}` : ''}
     <ol>${(run.requestLog || []).map((item) => `<li>${item.variantLabel ? escapeHTML(item.variantLabel) + ' · ' : ''}${escapeHTML(item.model)} · ${escapeHTML({ success: '成功', failed: '失败', unknown: '结果待核实', limited: '限流', unavailable: '不可用，切换候选' }[item.outcome] || '已提交')} · ${item.estimate == null ? '无价格估算' : '预留估算 ' + money(item.estimate, run.currency)}${item.request ? `<details><summary>实际请求 · ${escapeHTML(item.request.path)} · n=${item.request.n}</summary><p>任务：${escapeHTML(item.taskId)} · 方案版本 ${item.planRevision || 1} · 参考 ID：${escapeHTML(item.request.refIds.join('、') || '无')}</p><p class="agent-request-prompt">${escapeHTML(item.prompt || '')}</p></details>` : ''}</li>`).join('')}</ol></details></article>`,
     )
@@ -1041,9 +1153,15 @@ export function mountAgent() {
     fillPlanOptions(formPlan(run), run);
     updatePlanEstimate();
   };
-  $('agentPlanForm').addEventListener('input', () => {
+  $('agentPlanForm').addEventListener('input', (event) => {
     const run = runById(editingRunId);
     if (run?.status === 'review') {
+      run.variantStyleNotes = $('agentPlanStyleNotes').value;
+      const compiledInput = event.target.closest('[data-compiled-prompt]');
+      if (compiledInput && run.variantCompilation) {
+        run.variantCompilation.variants[Number(compiledInput.dataset.compiledPrompt)].prompt = compiledInput.value;
+        run.planRevision++; $('agentPlanAcknowledge').checked = false; delete run.acknowledgedSignature;
+      }
       const plan = formPlan(run);
       if (planSignature(plan) !== planSignature(run.plan)) { run.planRevision++; $('agentPlanAcknowledge').checked = false; delete run.acknowledgedSignature; }
       run.plan = plan;
@@ -1080,6 +1198,27 @@ export function mountAgent() {
     run.plan = formPlan(run);
     updatePlanEstimate(); persist();
   };
+  $('agentReviseVariants').onclick = guard(async () => {
+    const run = runById(editingRunId);
+    if (!run || run.status !== 'review' || planners.has(run.id)) return;
+    const feedback = $('agentPlanStyleNotes').value.trim();
+    if (!feedback) throw new Error('请先写下想调整的风格、变化幅度或要保留的内容。');
+    run.variantStyleNotes = feedback;
+    run.variationFeedback = feedback;
+    $('agentPlanDlg').close();
+    activityRunId = run.id; activityOpen = true;
+    await planRun(run);
+    if (needsInput(run)) openPlan(run);
+  });
+  $('agentRewriteVariants').onclick = async () => {
+    const run = runById(editingRunId);
+    if (!run || run.status !== 'review') return;
+    $('agentPlanError').textContent = '';
+    $('agentExecute').disabled = true;
+    try { await compileVariantPrompts(run, formPlan(run)); }
+    catch (error) { if (editingRunId === run.id) $('agentPlanError').textContent = error.message; }
+    finally { if (editingRunId === run.id && run.status === 'review') updatePlanEstimate(); }
+  };
   $('agentPlanReferences').onclick = guard(async (e) => {
     const id = e.target.closest('[data-detail-reference]')?.dataset.detailReference;
     const run = runById(editingRunId);
@@ -1114,16 +1253,22 @@ export function mountAgent() {
         await planRun(run);
       } else {
         const plan = formPlan(run);
-        if ($('agentPlanAcknowledge').checked) run.acknowledgedSignature = planSignature(plan);
+        if (plan.variants.length && !compilationCurrent(run, plan)) {
+          await compileVariantPrompts(run, plan);
+          return;
+        }
+        const finalPlan = executablePlan(run, plan);
+        if ($('agentPlanAcknowledge').checked) run.acknowledgedSignature = planSignature(finalPlan);
         if (plan.operation === 'crop') {
-          validateExecution(run, plan);
-          await prepareOperation(run, plan, true);
-        } else await execute(run, plan);
+          validateExecution(run, finalPlan);
+          await prepareOperation(run, finalPlan, true);
+        } else await execute(run, finalPlan);
       }
     } catch (e) {
-      $('agentPlanError').textContent = e.message;
+      if (editingRunId === run.id) $('agentPlanError').textContent = e.message;
     } finally {
       $('agentExecute').disabled = false;
+      if (run.status === 'review') updatePlanEstimate();
     }
   };
   $('agentImportPlan').onclick = () => {
@@ -1160,11 +1305,13 @@ function importRun(run) {
   const draft = structuredClone(run.snapshot);
   draft.variantAxis = '';
   draft.variants = '';
+  draft.variantPromptMode = 'delta';
   if (run.plan?.decision === 'ready') {
     let plan;
-    try { plan = normalizePlan(run.plan, run.context); }
+    try { plan = normalizePlan(executablePlan(run, run.plan), run.context); }
     catch { notify('旧方案未拆分为逐张内容，已恢复原始需求；请重新规划。'); restoreDraft(draft); setComposerMode(true); focusComposer(); return; }
-    draft.prompt = [plan.prompt, plan.exactText ? '逐字文案（保留空格、大小写和标点）：\n' + plan.exactText : ''].filter(Boolean).join('\n');
+    draft.prompt = plan.prompt;
+    draft.exactText = plan.exactText;
     draft.constraints = plan.constraints;
     draft.settings = {
       ...draft.settings,
@@ -1183,6 +1330,7 @@ function importRun(run) {
     if (plan.variants?.length) {
       draft.variantAxis = Array.from($('variantAxis').options).some((option) => option.value === plan.variantAxis) ? plan.variantAxis : '自定义方案';
       draft.variants = plan.variants.map((variant) => variant.prompt.replace(/\s*\n\s*/g, ' ')).join('\n');
+      draft.variantPromptMode = 'complete';
     }
   }
   draft.editQueuedId = null;

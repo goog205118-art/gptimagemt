@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { agentImageSpecs, imagePromptLines, normalizeVariants, normalizeVariationSuggestions } from '../shared/agent-variants.js';
+import { agentImageSpecs, imagePromptLines, normalizeVariants, normalizeVariationSuggestions, hasBatchInstruction, assertSingleImagePrompt, normalizeCompiledVariants, variantBrief } from '../shared/agent-variants.js';
 import { normalizePlan } from '../shared/agent-protocol.js';
 import { captureRequirements, planSignature, requirementConflicts } from '../shared/agent-requirements.js';
+import { recoverAgentSession } from '../src/core/agent-session.js';
 
 const variants = [
   { label: '柔和侧光', prompt: '采用柔和左侧光，亮部略暖' },
@@ -71,4 +72,58 @@ test('explicit variation axis and lines are preserved as user requirements', () 
   assert.deepEqual(requirementConflicts(plan, requirements), []);
   assert.ok(requirementConflicts({ ...plan, variantAxis: '背景' }, requirements).some((issue) => issue.field === 'variantAxis'));
   assert.ok(requirementConflicts({ ...plan, variants: [...variants].reverse() }, requirements).some((issue) => issue.field === 'variants'));
+});
+
+test('screenshot regression: 创作3张 and batch lists are rejected without stripping creative meaning', () => {
+  for (const prompt of [
+    '创作3张独立横版高端消费电子产品海报，不要拼成一张。借鉴 Apple 广告的极简视觉语言',
+    '创作３张独立横版高端消费电子产品海报',
+    '做三张海报', '三张独立横版海报', '创作三套方案',
+    '第一张：灰底。第二张：黑底。第三张：人像。',
+    '方案一：白底\n方案二：黑底',
+    'Make three separate product posters',
+    'Create three premium consumer electronics posters',
+  ]) {
+    assert.equal(hasBatchInstruction(prompt), true, prompt);
+    assert.throws(() => assertSingleImagePrompt(prompt), /阻止发送/);
+  }
+  for (const prompt of ['参考三张图片设计一张海报', '生成一张使用三张参考图的海报', '画面中摆放三个产品，英文排版', '使用三点布光，保持产品结构']) assert.equal(hasBatchInstruction(prompt), false, prompt);
+});
+
+test('compiled prompts are standalone sources, never prefixed with a shared brief or sibling deltas', () => {
+  const brief = variantBrief(plan, '保持产品，仅变化光线');
+  const result = { variants: variants.map((v) => ({ label: v.label, prompt: `一幅横版产品广告，保留结构和英文排版；${v.prompt}` })) };
+  const compiled = normalizeCompiledVariants(result, { brief, maxPrompt: 32000 });
+  const batchBrief = '创作3张独立横版高端消费电子产品海报，不要拼成一张';
+  const discussion = normalizePlan({ ...plan, prompt: batchBrief }, { ...context, independentVariantPrompts: true });
+  assert.equal(discussion.variantPromptMode, 'brief');
+  assert.throws(() => agentImageSpecs(discussion), /简报尚未/);
+  const specs = agentImageSpecs({ ...plan, prompt: batchBrief, variantPromptMode: 'complete', variants: compiled });
+  specs.forEach((spec, i) => {
+    assert.equal(spec.prompt, compiled[i].prompt);
+    assert.equal(spec.variant, '');
+    assert.equal(spec.variantLabel, variants[i].label);
+    const sent = imagePromptLines(spec).join('\n');
+    assert.ok(!sent.includes(batchBrief));
+    assert.ok(!sent.includes('本张变化'));
+    variants.forEach((v, j) => { if (i !== j) assert.ok(!sent.includes(v.prompt)); });
+  });
+  assert.throws(() => normalizeCompiledVariants({ variants: compiled.slice(1) }, { brief, maxPrompt: 32000 }), /数量/);
+  assert.throws(() => normalizeCompiledVariants({ variants: compiled.toReversed() }, { brief, maxPrompt: 32000 }), /顺序/);
+  assert.throws(() => normalizeCompiledVariants(result, { brief, maxPrompt: 5 }), /超过/);
+  assert.throws(() => normalizeCompiledVariants({ variants: [{ ...compiled[0], prompt: '创作3张独立海报' }, ...compiled.slice(1)] }, { brief, maxPrompt: 32000 }), /本张变化/);
+  assert.notEqual(planSignature(plan), planSignature({ ...plan, variantPromptMode: 'complete' }));
+  assert.notDeepEqual(brief, variantBrief(plan, '更大胆的背景'));
+});
+
+test('interrupting prompt writing discards old compiled output without starting or resuming image requests', () => {
+  const run = { id: 'run', status: 'review', variantWriting: true, variantCompilation: { variants }, requests: 0 };
+  recoverAgentSession(run, []);
+  assert.equal(run.status, 'review');
+  assert.equal(run.requests, 0);
+  assert.equal(run.variantWriting, undefined);
+  assert.equal(run.variantCompilation, undefined);
+  assert.match(run.error, /尚未发起生图/);
+  const rawText = '  Soap Kit.\nHands-free.  ';
+  assert.equal(captureRequirements({ settings: {}, refs: [], exactText: rawText }, '做变体').values.exactText, rawText);
 });

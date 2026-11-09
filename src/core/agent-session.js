@@ -2,6 +2,11 @@ import { SESSION_VERSION, captureRequirements } from '../../shared/agent-require
 
 // Safe both on refresh and backup import. An issued request is never resumed.
 export function recoverAgentSession(run, tasks, imported = false) {
+  if (run.variantWriting) {
+    delete run.variantWriting;
+    delete run.variantCompilation;
+    run.error = '提示词编写已中断，可能产生文本用量；尚未发起生图。请核对选择后手动编写。';
+  }
   run.schemaVersion ||= SESSION_VERSION;
   run.requestLog ||= [];
   run.answers ||= [];

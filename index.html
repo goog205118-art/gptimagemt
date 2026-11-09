@@ -462,6 +462,7 @@
                       maxlength="2000"
                     />
                   </details>
+                  <details class="preserve-details"><summary>精确文案</summary><label for="exactText" class="parameter-help">逐字保留大小写、空格和标点</label><textarea id="exactText" rows="2" maxlength="4000" aria-label="逐字文案" placeholder="如：Your world. Hands-free."></textarea></details>
                   <p class="parameter-help" id="promptBudget"></p>
                 </section>
                 <section
@@ -605,12 +606,15 @@
                     </select>
                   </div>
                   <div class="parameter-field">
+                    <label for="variantPromptMode">每行内容</label><select id="variantPromptMode"><option value="delta">变化细节 · 追加到画面描述</option><option value="complete">完整提示词 · 各行独立发送</option></select>
+                  </div>
+                  <div class="parameter-field">
                     <label for="variants">每行一个方案 · 最多 8 个</label
                     ><textarea
                       id="variants"
                       rows="3"
                       placeholder="浅灰纯色背景&#10;木质桌面与窗边植物"
-                      maxlength="4000"
+                      maxlength="32000"
                     ></textarea>
                   </div>
                   <p class="parameter-help">每个方案按“画面”中的张数生成，合计最多 32 张。</p>
@@ -1343,13 +1347,17 @@
               <div id="agentPlanSuggestions" hidden><p id="agentPlanSuggestionType" class="agent-help"></p><div id="agentPlanSuggestionGroups" class="agent-suggestion-groups"></div><p id="agentPlanSuggestionReason" class="agent-help"></p><p id="agentPlanSelectedCount" role="status" class="agent-help"></p></div>
               <div class="field"><label for="agentPlanVariantAxis">变化维度</label><input id="agentPlanVariantAxis" maxlength="100" placeholder="如：光线；仅在此维度内适度变化" /></div>
               <div id="agentPlanVariants" class="agent-plan-variants"></div>
+              <div class="field"><label for="agentPlanStyleNotes">和 AI 讨论变体方向</label><textarea id="agentPlanStyleNotes" rows="2" maxlength="1200" placeholder="如：我更想比较背景风格，变化明显一点，但产品、英文文案和排版保持一致"></textarea></div>
+              <button type="button" class="btn outlined" id="agentReviseVariants">让 AI 调整建议</button>
+              <p class="agent-help">选好细节后，AI 会先编写每张完整提示词。此步只产生文本用量，确认后才生图。</p>
+              <section id="agentCompiledSection" hidden aria-labelledby="agentCompiledTitle"><h3 id="agentCompiledTitle">逐张完整提示词</h3><p id="agentCompiledStatus" class="agent-help" role="status"></p><div id="agentCompiledVariants" class="agent-plan-variants"></div><button type="button" class="btn" id="agentRewriteVariants">让 AI 重新编写提示词</button></section>
             </section>
             <div class="preset-field-row">
               <div class="field"><label for="agentPlanOperation">本轮操作</label><select id="agentPlanOperation"><option value="create">新建</option><option value="edit">整图修改</option><option value="local">局部修改</option><option value="crop">本地裁切</option><option value="outpaint">扩图</option></select></div>
               <div class="field"><label for="agentPlanBase">指定底图</label><select id="agentPlanBase"></select></div>
             </div>
             <div class="field">
-              <label for="agentPlanPrompt">单张创作要求（多张共用）</label
+              <label for="agentPlanPrompt">创作简报（供 AI 编写每张提示词）</label
               ><textarea id="agentPlanPrompt" rows="4" maxlength="32000"></textarea>
             </div>
             <div class="field">

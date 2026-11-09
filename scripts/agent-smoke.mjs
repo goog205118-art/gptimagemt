@@ -12,15 +12,24 @@ const page = await context.newPage();
 page.setDefaultTimeout(10000);
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
-let imageCalls = 0, providerAttempts = 0, mode = 'normal', lastContext, image;
+let imageCalls = 0, providerAttempts = 0, mode = 'normal', lastContext, lastVariantContext, image, compileCalls = 0;
 const sentPrompts = [];
 await page.route('**/*', async (route) => {
   const request = route.request(), url = new URL(request.url());
   if (url.pathname === '/fixture-seed') return route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Isolated test setup</title>' });
   if (url.pathname === '/api/agent') {
-    const body = request.postDataJSON(); lastContext = body.context;
+    const body = request.postDataJSON();
+    if (body.action === 'variants') {
+      compileCalls++; lastVariantContext = body.context;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (mode === 'compile-network') return route.abort('connectionreset');
+      const variants = body.context.brief.variants.map((v) => ({ label: v.label, prompt: mode === 'compile-unsafe' ? '创作3张独立横版高端消费电子产品海报，不要拼成一张' : `一幅完整横版产品广告海报，保留香皂形状、Logo 和英文排版。${v.prompt}。主体清晰，排版克制。` }));
+      return route.fulfill({ json: { plan: { variants }, usage: { input_tokens: 2 } } });
+    }
+    lastContext = body.context;
     if (body.action !== 'plan') return route.fulfill({ json: { visible: true } });
     const c = body.context;
+    if (mode === 'interaction' && !c.answers.length) return route.fulfill({ json: { plan: { decision: 'clarify', summary: '先确认适合产品广告的变化方向。', questions: [{ title: '产品、Logo 和英文排版保持一致，想先比较哪类变化？', options: ['背景质感', '光线氛围', '构图留白'] }] } } });
     const roles = c.references.map((ref) => {
       const locked = c.requirements.references.find((item) => item.id === ref.id);
       return { id: ref.id, role: locked?.role || ref.role, note: locked?.note || ref.note || '' };
@@ -30,20 +39,20 @@ await page.route('**/*', async (route) => {
       constraints: c.requirements.values.constraints || '', exactText: c.requirements.values.exactText || '',
       operation: mode === 'crop' ? 'crop' : mode === 'local' ? 'local' : mode === 'outpaint' ? 'outpaint' : c.requirements.values.operation || 'create',
       baseId: c.requirements.values.baseId || '', model: 'gpt-image-2', size: mode === 'crop' || mode === 'outpaint' ? '1024x1280' : mode === 'drift' ? '1536x1024' : '1024x1024',
-      count: mode === 'drift' ? 2 : mode === 'variants' ? 3 : 1, quality: 'medium', format: 'png', background: 'auto',
-      variantAxis: ['drift', 'variants'].includes(mode) ? '光线' : '',
-      variants: mode === 'drift' ? [{ label: '明亮', prompt: '柔和明亮光线' }, { label: '柔暗', prompt: '略微柔暗光线' }] : mode === 'variants' ? c.variation.options.map((prompt, i) => ({ label: ['柔和侧光', '正面漫射', '轮廓补光'][i], prompt })) : [],
+      count: mode === 'drift' ? 2 : ['variants', 'interaction'].includes(mode) ? 3 : 1, quality: 'medium', format: 'png', background: 'auto',
+      variantAxis: ['drift', 'variants', 'interaction'].includes(mode) ? '光线' : '',
+      variants: mode === 'drift' ? [{ label: '明亮', prompt: '柔和明亮光线' }, { label: '柔暗', prompt: '略微柔暗光线' }] : ['variants', 'interaction'].includes(mode) ? (c.variation.options.length ? c.variation.options : ['柔和左侧光', '正面漫射光', '轻微轮廓补光']).map((prompt, i) => ({ label: ['柔和侧光', '正面漫射', '轮廓补光'][i], prompt })) : [],
       referenceRoles: mode === 'drift' ? roles.map((ref) => ({ ...ref, role: 'style' })) : roles, questions: [],
     };
-    if (mode === 'variants') p.prompt = '单张产品海报，保留主体与英文排版';
-    if (['drift', 'variants'].includes(mode)) {
+    if (['variants', 'interaction'].includes(mode)) p.prompt = '创作3张独立横版高端消费电子产品海报，不要拼成一张。保留主体与英文排版';
+    if (['drift', 'variants', 'interaction'].includes(mode)) {
       p.contentType = '产品广告海报';
       p.variationSuggestions = [
         { axis: '光线', reason: '保留香皂产品与英文排版，通过光向对比产品纹理。', variants: p.variants },
         { axis: '背景', reason: '仅调整纯色背景明度，让产品继续成为主体。', variants: [{ label: '浅灰背景', prompt: '使用浅灰纯色背景' }, { label: '暖灰背景', prompt: '使用淡暖灰纯色背景' }] },
       ];
     }
-    if (mode === 'aggregate') { p.count = 3; p.prompt = '生成三张独立的横版高级产品广告海报，三张分别采用不同背景'; }
+    if (mode === 'aggregate') { p.count = 3; p.prompt = '创作3张独立横版高端消费电子产品海报，不要拼成一张。借鉴 Apple 广告的极简视觉语言'; }
     return route.fulfill({ json: { plan: p, usage: { input_tokens: 1 } } });
   }
   if (url.hostname === 'api.openlux.ai' && url.pathname.startsWith('/v1/images/')) {
@@ -115,6 +124,12 @@ async function requestPreviews(count = 1) {
   await page.waitForFunction((n) => document.querySelectorAll('#agentPlanRequestPreview .agent-request-prompt').length === n, count);
   return page.locator('#agentPlanRequestPreview .agent-request-prompt').allTextContents();
 }
+async function compilePrompts() {
+  const before = imageCalls;
+  await page.locator('#agentExecute').click();
+  await page.waitForFunction(() => document.querySelector('#agentExecute').textContent.startsWith('确认生成'));
+  assert.equal(imageCalls, before, 'writing prompts must never start image generation');
+}
 try {
   await seed();
   await startFromVersion('背景再亮一点');
@@ -137,6 +152,7 @@ try {
   assert.match(await page.locator('#agentPlanDifferences').innerText(), /张数/);
   assert.equal(await page.locator('#agentExecute').isDisabled(), true);
   await page.locator('#agentPlanVariants input[type=checkbox]').first().check();
+  await compilePrompts();
   await page.locator('#agentExecute').click();
   assert.match(await page.locator('#agentPlanError').innerText(), /核对/);
   assert.equal(imageCalls, 1);
@@ -297,6 +313,11 @@ try {
   assert.equal(await page.locator('#agentPlanCount').inputValue(), '0');
   assert.equal(await page.locator('#agentExecute').isDisabled(), true);
   for (const box of await page.locator('#agentPlanVariants input[type=checkbox]').all()) await box.check();
+  await page.locator('#agentPlanStyleNotes').fill('光线变化明显一点，产品与英文文案不变');
+  await compilePrompts();
+  assert.equal(lastVariantContext.brief.styleNotes, '光线变化明显一点，产品与英文文案不变');
+  assert.equal(lastVariantContext.brief.variants.length, 3);
+  const compiledPrompts = await page.locator('#agentCompiledVariants textarea').evaluateAll((inputs) => inputs.map((input) => input.value));
   await requestPreviews(3);
   assert.match(await page.locator('#agentPlanRequestPreview').textContent(), /3 个请求，每个请求 n=1/);
   const previewPrompts = await page.locator('#agentPlanRequestPreview .agent-request-prompt').allTextContents();
@@ -319,7 +340,9 @@ try {
   assert.equal(imageCalls - callsBeforeVariants, 3);
   assert.equal(variantTasks.length, 3);
   variantTasks.forEach((task, i) => {
-    assert.equal(task.variant, choices[i]);
+    assert.equal(task.variant, '');
+    assert.equal(task.prompt, compiledPrompts[i]);
+    assert.equal(task.variantPromptMode, 'complete');
     assert.equal(task.submittedPrompt, previewPrompts[i]);
     assert.equal(task.requestSummary.n, 1);
     assert.ok(!task.submittedPrompt.includes('生成三张'));
@@ -336,7 +359,9 @@ try {
   assert.equal(await page.locator('#agentHistoryDlg').isVisible(), false);
   assert.equal(await page.locator('#n').inputValue(), '1');
   assert.equal(await page.locator('#variantAxis').inputValue(), '光线');
-  assert.deepEqual((await page.locator('#variants').inputValue()).split('\n'), choices);
+  assert.equal(await page.locator('#variantPromptMode').inputValue(), 'complete');
+  assert.equal(await page.locator('#exactText').inputValue(), 'Soap Kit.');
+  assert.deepEqual((await page.locator('#variants').inputValue()).split('\n'), compiledPrompts);
   assert.ok(!(await page.locator('#prompt').inputValue()).includes('生成三张'));
   await page.locator('#agentModeBtn').click();
   await page.locator('#agentSettingsBtn').click();
@@ -353,12 +378,13 @@ try {
   await page.locator('#agentActivityReview').click();
   assert.equal(await page.locator('#agentPlanVariants input[type=checkbox]').last().isChecked(), true);
   assert.equal(await page.locator('#agentPlanCount').inputValue(), '1');
+  await compilePrompts();
   if (await page.locator('#agentPlanAcknowledge').isVisible()) await page.locator('#agentPlanAcknowledge').check();
   await page.locator('#agentExecute').click();
   state = await waitSaved((s) => s.agentRuns[0]?.status === 'success');
   const chosenTasks = state.tasks.filter((task) => task.agentRunId === state.agentRuns[0].id);
   assert.equal(chosenTasks.length, 1);
-  assert.equal(chosenTasks[0].variant, '使用淡暖灰纯色背景');
+  assert.ok(chosenTasks[0].prompt.includes('使用淡暖灰纯色背景'));
   assert.equal(chosenTasks[0].variantAxis, '背景');
   assert.equal(imageCalls, callsBeforeVariants + 4);
   // Old or malformed planner output is stopped with a reason; zero image requests.
@@ -371,8 +397,81 @@ try {
   state = await waitSaved((s) => s.agentRuns[0]?.status === 'failed');
   assert.match(state.agentRuns[0].error, /整批/);
   assert.equal(imageCalls, callsBeforeVariants + 4);
+  // Open-ended interaction: ask about style, accept free feedback, then compile without generating.
+  await startFromVersion('帮我推荐适合这个产品的变体，我来选择', 'interaction');
+  assert.equal(await page.locator('#agentQuestions fieldset').count(), 1);
+  await page.locator('#agentQuestions input[type=radio]').first().check();
+  await page.locator('#agentExecute').click();
+  await page.locator('#agentActivityReview').click();
+  assert.equal(lastContext.answers[0].answer, '背景质感');
+  await page.locator('#agentPlanStyleNotes').fill('背景改为更有质感的灰色，产品和英文排版保持一致');
+  await page.locator('#agentReviseVariants').click();
+  await page.locator('#agentPlanDlg').waitFor({ state: 'visible' });
+  assert.ok(lastContext.variationFeedback.includes('质感的灰色'));
+  assert.ok(lastContext.priorPlan.prompt.includes('创作3张'));
+  await page.locator('[data-variation-group="1"]').click();
+  await page.locator('#agentPlanVariants input[type=checkbox]').first().check();
+  await compilePrompts();
+  const beforeInvalid = imageCalls;
+  // Altering the brief invalidates the compilation; a bad model reply never falls back to it.
+  await page.locator('#agentPlanStyleNotes').fill('更温暖的背景，产品保持不变');
+  assert.match(await page.locator('#agentExecute').innerText(), /编写/);
+  assert.equal(await page.locator('#agentCompiledVariants textarea').first().isDisabled(), true);
+  mode = 'compile-unsafe';
+  await page.locator('#agentExecute').click();
+  await page.waitForFunction(() => document.querySelector('#agentPlanError').textContent.includes('整批'));
+  assert.equal(imageCalls, beforeInvalid);
+  assert.equal(await page.locator('#agentCompiledSection').isVisible(), false);
+  mode = 'compile-network';
+  await page.locator('#agentExecute').click();
+  await page.waitForFunction(() => !document.querySelector('#agentExecute').disabled && !!document.querySelector('#agentPlanError').textContent);
+  assert.equal(imageCalls, beforeInvalid);
+  mode = 'variants';
+  const compileBeforeDouble = compileCalls;
+  await page.locator('#agentExecute').evaluate((button) => { button.click(); button.click(); });
+  await page.waitForFunction(() => document.querySelector('#agentExecute').textContent.startsWith('确认生成'));
+  assert.equal(compileCalls, compileBeforeDouble + 1);
+  const full = page.locator('#agentCompiledVariants textarea').first();
+  const safePrompt = await full.inputValue();
+  await full.fill('创作3张独立横版高端消费电子产品海报，不要拼成一张');
+  await page.locator('#agentExecute').click();
+  assert.match(await page.locator('#agentPlanError').innerText(), /整批/);
+  assert.equal(imageCalls, beforeInvalid);
+  await full.fill(safePrompt + ' 留白稍多。');
+  const [finalPreview] = await requestPreviews();
+  await page.screenshot({ path: `${out}/independent-prompts-desktop.png` });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#agentCompiledSection').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.screenshot({ path: `${out}/independent-prompts-mobile.png` });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  if (await page.locator('#agentPlanAcknowledge').isVisible()) await page.locator('#agentPlanAcknowledge').check();
+  await page.locator('#agentExecute').click();
+  state = await waitSaved((s) => s.agentRuns[0]?.status === 'success');
+  assert.equal(imageCalls, beforeInvalid + 1);
+  assert.equal(state.tasks[0].submittedPrompt, finalPreview);
+  assert.ok(!state.tasks[0].prompt.includes('创作3张'));
+  // Import keeps independent prompts and exact copy; even a batch instruction in the shared box is not sent.
+  const finalRunId = state.agentRuns[0].id;
+  await page.locator('#agentActivityBtn').click();
+  if (!(await page.locator('#agentHistoryDlg').isVisible())) await page.locator('#agentActivityHistory').click();
+  await page.locator(`#agentHistoryList [data-agent-run="${finalRunId}"] [data-agent-action="import"]`).click();
+  await page.locator('#prompt').fill('创作3张独立横版高端消费电子产品海报，不要拼成一张');
+  assert.equal(await page.locator('#variantPromptMode').inputValue(), 'complete');
+  const beforeManual = imageCalls;
+  await page.locator('#genBtn').click();
+  state = await waitSaved((s) => !s.tasks[0].agentRunId && s.tasks[0].status === 'success');
+  assert.equal(imageCalls, beforeManual + 1);
+  assert.ok(!state.tasks[0].submittedPrompt.includes('创作3张'));
+  assert.ok(state.tasks[0].submittedPrompt.includes('Soap Kit.'));
+  // Last-mile validation also checks appended constraints, before any provider request.
+  await page.locator('#constraints').evaluate((input) => { input.value = '创作3张独立横版产品海报'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.locator('#genBtn').click();
+  state = await waitSaved((s) => !s.tasks[0].agentRunId && s.tasks[0].status === 'failed');
+  assert.match(state.tasks[0].error, /整批/);
+  assert.equal(imageCalls, beforeManual + 1);
   assert.equal(errors.length, 0, errors.join('\n'));
-  await writeFile(`${out}/report.json`, JSON.stringify({ imageCalls, errors, checks, passed: ['version lineage', 'fixed approval', 'single double-click submission', 'intent conflict gate', 'confirmation invalidation', 'retained form', 'stable gallery layout', 'keyboard collapse and focus', 'zero-request crop', 'mask workflow', 'responsive dialog', 'outpaint layout and output mismatch', 'high-detail reference planning', '429 shared budget', 'explicit rejection fallback', 'ambiguous 503 no retry', 'network failure and refresh', 'legacy backup import and continuation', 'isolated variant prompts', 'preview matches actual requests', 'aggregate instruction blocked', 'manual import keeps one image per variant', 'content-aware recommendations require selection', 'one selected suggestion produces one image', 'mask and outpaint preview matches request', 'automatic mode waits for variant selection'] }, null, 2));
+  await writeFile(`${out}/report.json`, JSON.stringify({ imageCalls, compileCalls, errors, checks, passed: ['version lineage', 'fixed approval', 'single double-click submission', 'intent conflict gate', 'confirmation invalidation', 'retained form', 'stable gallery layout', 'keyboard collapse and focus', 'zero-request crop', 'mask workflow', 'responsive dialog', 'outpaint layout and output mismatch', 'high-detail reference planning', '429 shared budget', 'explicit rejection fallback', 'ambiguous 503 no retry', 'network failure and refresh', 'legacy backup import and continuation', 'isolated variant prompts', 'preview matches actual requests', 'screenshot batch instruction blocked', 'manual import keeps one image per variant', 'content-aware recommendations require selection', 'one selected suggestion produces one image', 'mask and outpaint preview matches request', 'automatic mode waits for variant selection', 'style clarification and follow-up feedback', 'independent AI prompt writing before images', 'source edits invalidate old prompts', 'unsafe compilation fails closed', 'compiler network failure does not generate', 'double click compiles once', 'edited final prompt is validated', 'complete manual mode preserves exact copy', 'last-mile constraints validation'] }, null, 2));
   console.log('Browser integration passed, including isolated variant prompts and request transparency; all provider responses mocked.');
 } catch (error) {
   await page.screenshot({ path: `${out}/failure.png` });

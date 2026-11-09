@@ -1,5 +1,6 @@
 import { readRequest, providerJSON, sendJSON, failure, RequestError } from '../server/openlux.js';
-import { buildPlannerBody, extractPlanOutput, normalizePlan } from '../shared/agent-protocol.js';
+import { buildPlannerBody, buildVariantPromptBody, extractPlanOutput, normalizePlan } from '../shared/agent-protocol.js';
+import { normalizeCompiledVariants } from '../shared/agent-variants.js';
 
 export default async function agent(request, response) {
   try {
@@ -11,10 +12,11 @@ export default async function agent(request, response) {
       });
       return;
     }
-    if (body.action !== 'plan') throw new RequestError(400, '未知的 Agent 操作。');
+    if (!['plan', 'variants'].includes(body.action)) throw new RequestError(400, '未知的 Agent 操作。');
     let input;
     try {
-      input = buildPlannerBody(body);
+      if (body.action === 'variants') normalizeCompiledVariants({ variants: body.context?.brief?.variants }, body.context || {});
+      input = body.action === 'variants' ? buildVariantPromptBody(body) : buildPlannerBody(body);
     } catch (e) {
       throw new RequestError(400, e.message);
     }
@@ -55,7 +57,8 @@ export default async function agent(request, response) {
     let plan;
     try {
       plan = extractPlanOutput(data);
-      normalizePlan(plan, body.context);
+      if (body.action === 'variants') plan = { variants: normalizeCompiledVariants(plan, body.context) };
+      else normalizePlan(plan, body.context);
     } catch (e) {
       throw new RequestError(502, e.message);
     }

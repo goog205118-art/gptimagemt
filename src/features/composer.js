@@ -82,9 +82,11 @@ function readDraft() {
     refs: copyRefs(state.refs),
     settings: settingsSnapshot(),
     constraints: $('constraints').value,
+    exactText: $('exactText').value,
     projectId: $('draftProject').value || 'default',
     n: numeric('n', 1, 4, 1),
     variantAxis: $('variantAxis').value,
+    variantPromptMode: $('variantPromptMode').value,
     variants: $('variants').value,
     parentId: state.parentId,
     editQueuedId: state.editQueuedId,
@@ -125,9 +127,11 @@ function restoreDraft(d) {
   state.mask = d.mask || null;
   $('prompt').value = d.prompt || '';
   $('constraints').value = d.constraints || '';
+  $('exactText').value = d.exactText || '';
   $('draftProject').value = d.projectId || 'default';
   $('n').value = d.n || 1;
   $('variantAxis').value = d.variantAxis || '';
+  $('variantPromptMode').value = d.variantPromptMode === 'complete' ? 'complete' : 'delta';
   $('variants').value = d.variants || '';
   applySettings(d.settings);
   renderRefs();
@@ -193,6 +197,7 @@ function renderEditContext() {
   }
   $('n').disabled = !!queued;
   $('variantAxis').disabled = !!queued;
+  $('variantPromptMode').disabled = !!queued;
   $('variants').disabled = !!queued;
 }
 function expandAdvanced() {
@@ -209,7 +214,9 @@ async function newDraft() {
   state.refs = [];
   $('prompt').value = '';
   $('constraints').value = '';
+  $('exactText').value = '';
   $('variantAxis').value = '';
+  $('variantPromptMode').value = 'delta';
   $('variants').value = '';
   $('n').value = 1;
   collapseAdvanced();
@@ -255,9 +262,11 @@ async function continueTask(t) {
   applySettings(t.settings);
   $('prompt').value = '';
   $('constraints').value = t.confirmedRequirements?.values?.constraints || t.constraints || '建议保留主体结构、材质和未指定内容，请核对。';
+  $('exactText').value = t.confirmedRequirements?.values?.exactText || t.exactText || '';
   $('draftProject').value = t.projectId || 'default';
   $('n').value = 1;
   $('variantAxis').value = '';
+  $('variantPromptMode').value = 'delta';
   $('variants').value = '';
   renderRefs();
   renderEditContext();
@@ -277,9 +286,11 @@ function importTask(t, queueEdit = false) {
   applySettings(t.settings);
   $('prompt').value = t.prompt;
   $('constraints').value = t.constraints || '';
+  $('exactText').value = t.exactText || '';
   $('draftProject').value = t.projectId || 'default';
   $('n').value = 1;
   $('variantAxis').value = t.variant && t.variantAxis ? t.variantAxis : '';
+  $('variantPromptMode').value = 'delta';
   $('variants').value = t.variant || '';
   renderRefs();
   renderEditContext();

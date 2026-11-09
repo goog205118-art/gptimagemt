@@ -452,6 +452,13 @@
 .agent-request-prompt { white-space: pre-wrap; overflow-wrap: anywhere; }
 #agentPlanRequestPreview { overflow-wrap: anywhere; }
 #agentPlanRequestPreview details { margin-block: 10px; }
+#agentCompiledTitle { font-size: 15px; margin-block: 20px 8px; }
+#agentReviseVariants, #agentRewriteVariants { white-space: normal; text-align: left; }
+.agent-complete-prompt { min-height: 130px; resize: vertical; font: inherit; font-size: 13px; line-height: 1.6; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
+#exactText { box-sizing: border-box; width: 100%; resize: vertical; margin-top: 6px; }
+@media (max-width: 600px) {
+  .agent-complete-prompt, #agentPlanStyleNotes, #exactText { font-size: 16px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .agent-activity {
     --activity-motion: 70ms;
