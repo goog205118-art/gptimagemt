@@ -4,6 +4,8 @@ const runtime = {
   saveRevision: 0,
   uploadChain: Promise.resolve(),
   draftTimer: null,
+  draftRevision: 0,
+  draftResetAt: 0,
   toastTimer: null,
   dragDepth: 0,
   queueCounter: Date.now(),

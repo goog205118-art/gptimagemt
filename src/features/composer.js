@@ -91,7 +91,7 @@ function readDraft() {
     parentId: state.parentId,
     editQueuedId: state.editQueuedId,
     mask: state.mask,
-    updatedAt: Date.now(),
+    updatedAt: Math.max(Date.now(), runtime.draftResetAt),
   };
 }
 function captureDraft() {
@@ -101,6 +101,7 @@ function captureDraft() {
     JSON.stringify({
       prompt: state.draft.prompt,
       updatedAt: state.draft.updatedAt,
+      resetAt: runtime.draftResetAt,
     }),
   );
 }
@@ -207,25 +208,29 @@ function collapseAdvanced() {
   closeParameterPanel(false);
   $('composer').scrollTop = 0;
 }
-async function newDraft() {
-  state.parentId = null;
-  state.editQueuedId = null;
-  state.mask = null;
-  state.refs = [];
-  $('prompt').value = '';
-  $('constraints').value = '';
-  $('exactText').value = '';
-  $('variantAxis').value = '';
-  $('variantPromptMode').value = 'delta';
-  $('variants').value = '';
-  $('n').value = 1;
+function emptyDraftContent() {
+  return {
+    parentId: null, editQueuedId: null, mask: null, refs: [],
+    prompt: '', constraints: '', exactText: '', variantAxis: '',
+    variantPromptMode: 'delta', variants: '', n: 1,
+  };
+}
+async function resetDraftContent() {
+  runtime.draftRevision++;
+  // The text fallback also protects against restoring an older IndexedDB draft after a failed write.
+  runtime.draftResetAt = Math.max(Date.now(), (state.draft.updatedAt || 0) + 1);
+  restoreDraft({ ...emptyDraftContent(), projectId: $('draftProject').value });
   collapseAdvanced();
-  renderRefs();
-  renderEditContext();
-  scheduleDraft();
+  const saved = await flushDraft();
+  $('draftSaved').textContent = saved ? '草稿已保存' : '草稿未持久保存';
+  return saved;
+}
+function newDraft() {
+  const saved = resetDraftContent();
   expandComposer();
   $('prompt').focus();
   setStatus('新的创作已准备好，进行中的任务会继续。');
+  return saved;
 }
 const starters = {
   product:
@@ -243,7 +248,9 @@ function focusComposer() {
   $('composer').scrollTop = 0;
 }
 async function continueTask(t) {
+  const revision = runtime.draftRevision;
   const blob = await outputBlob(t);
+  if (revision !== runtime.draftRevision) return false;
   state.parentId = t.id;
   state.editQueuedId = null;
   state.mask = null;
@@ -273,6 +280,7 @@ async function continueTask(t) {
   scheduleDraft();
   focusComposer();
   setStatus('已选中此版本，写下本次修改要求即可。');
+  return true;
 }
 function importTask(t, queueEdit = false) {
   state.parentId = t.parentId || null;
@@ -372,13 +380,7 @@ function mountFeaturesComposer() {
     scheduleDraft();
   });
   $('newBtn').onclick = newDraft;
-  $('exitEdit').onclick = () => {
-    state.parentId = null;
-    state.editQueuedId = null;
-    state.mask = null;
-    renderEditContext();
-    scheduleDraft();
-  };
+  $('exitEdit').onclick = newDraft;
   $('clearRefs').onclick = () => {
     state.refs = [];
     state.mask = null;
@@ -440,6 +442,7 @@ export {
   captureDraft,
   collapseAdvanced,
   continueTask,
+  emptyDraftContent,
   expandComposer,
   flushDraft,
   focusComposer,
@@ -447,6 +450,7 @@ export {
   mountFeaturesComposer,
   readDraft,
   renderEditContext,
+  resetDraftContent,
   restoreDraft,
   scheduleDraft,
   setSelect,

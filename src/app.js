@@ -1,8 +1,8 @@
 import { seedPromptPresets } from './features/presets.js';
-import { active, state, taskById } from './core/state.js';
+import { active, existing, state, taskById } from './core/state.js';
 import { imageURL, referenceURL } from './core/assets.js';
 import { fileName } from './features/transfers.js';
-import { captureDraft, renderEditContext, restoreDraft, updateSend } from './features/composer.js';
+import { captureDraft, emptyDraftContent, renderEditContext, restoreDraft, updateSend } from './features/composer.js';
 import { openDB, persist, readDB, storageGet } from './core/storage.js';
 import { runtime } from './core/runtime.js';
 import { effectivePrompt } from './features/jobs.js';
@@ -96,13 +96,20 @@ async function init() {
   initializeAccountControls();
   $('concurrency').value = state.prefs.concurrency || 3;
   renderProjects();
-  restoreDraft(state.draft);
-  applyGptProfile(true);
+
   try {
     const fast = JSON.parse(storageGet('openlux_draft_text') || 'null');
+    runtime.draftResetAt = Number.isFinite(fast?.resetAt) ? fast.resetAt : 0;
+    if (runtime.draftResetAt > (state.draft.updatedAt || 0))
+      state.draft = { ...state.draft, ...emptyDraftContent() };
     if (fast && fast.updatedAt > (state.draft.updatedAt || 0))
-      $('prompt').value = fast.prompt || '';
+      state.draft.prompt = fast.prompt || '';
   } catch {}
+  const parent = taskById(state.draft.parentId);
+  if (state.draft.parentId && (!parent || !existing(parent)))
+    state.draft = { ...state.draft, ...emptyDraftContent() };
+  restoreDraft(state.draft);
+  applyGptProfile(true);
   if (
     state.editQueuedId &&
     !['queued', 'retry_wait'].includes(taskById(state.editQueuedId)?.status)

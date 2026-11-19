@@ -79,7 +79,8 @@ async function submit() {
     $('prompt').focus();
     return;
   }
-  const settings = settingsSnapshot(),
+  const revision = runtime.draftRevision,
+    settings = settingsSnapshot(),
     variants = variantsList(),
     n = numeric('n', 1, 4, 1);
   if (!state.editQueuedId && (!variants.length || variants.length > 8)) {
@@ -123,6 +124,7 @@ async function submit() {
     setStatus(e.message, true);
     return;
   }
+  if (revision !== runtime.draftRevision) return;
   state.submitting = true;
   updateSend();
   try {

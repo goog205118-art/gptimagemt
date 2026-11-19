@@ -40,6 +40,7 @@ function renderRefs() {
   pruneURLs();
 }
 function addFiles(files, deferFailure = false) {
+  const revision = runtime.draftRevision;
   const source = Array.from(files),
     available = Math.max(0, MAX_REFS - state.refs.length);
   const list = source.slice(0, available);
@@ -72,6 +73,7 @@ function addFiles(files, deferFailure = false) {
           if (result.error) throw result.error;
           const image = await decodeImageBlob(result.blob, file.name || '参考图');
           image.close();
+          if (revision !== runtime.draftRevision) return;
           state.refs.push({
             id: uid(),
             name: file.name || '参考图.png',
@@ -84,6 +86,7 @@ function addFiles(files, deferFailure = false) {
           errors.push(e.message);
         }
       }
+      if (revision !== runtime.draftRevision) return;
       renderRefs();
       scheduleDraft();
       if (count) {
@@ -105,7 +108,9 @@ function hasDrag(e) {
   );
 }
 async function useAsReference(t) {
+  const revision = runtime.draftRevision;
   const blob = await outputBlob(t);
+  if (revision !== runtime.draftRevision) return;
   await addFiles([
     new File([blob], `作品-${taskTitle(t).slice(0, 25)}.${extension(blob)}`, {
       type: blob.type,
@@ -190,6 +195,7 @@ function mountFeaturesReferences() {
       runtime.dragDepth = 0;
       $('dropOverlay').hidden = true;
       if (document.querySelector('dialog[open]')) return;
+      const revision = runtime.draftRevision;
       const internal = e.dataTransfer.getData('application/x-openlux-image');
       const uri = e.dataTransfer
         .getData('text/uri-list')
@@ -220,6 +226,7 @@ function mountFeaturesReferences() {
       }
       if (uri) {
         const blob = await fetchImage(uri);
+        if (revision !== runtime.draftRevision) return;
         await addFiles([
           new File([blob], '拖入的参考图.' + extension(blob), {
             type: blob.type,

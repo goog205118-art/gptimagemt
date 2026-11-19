@@ -1322,7 +1322,7 @@ export async function continueWithAgent(task) {
     document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
     renderAgentActivity(); openPlan(pending); return;
   }
-  await continueTask(task);
+  if (!(await continueTask(task))) return;
   setComposerMode(true);
   setStatus('已绑定所选版本与该分支保留要求，填写本轮修改后提交 Agent。');
 }

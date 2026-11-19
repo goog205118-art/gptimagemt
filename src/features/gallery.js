@@ -9,12 +9,12 @@ import { renderQueue } from './queue.js';
 import { runtime } from '../core/runtime.js';
 import { openDetail, renderDetail } from './detail.js';
 import { persist } from '../core/storage.js';
-import { continueTask, importTask } from './composer.js';
+import { continueTask, importTask, resetDraftContent } from './composer.js';
 import { useAsReference } from './references.js';
 import { download, saveBlob, copyImageForPhotoshop, downloadPhotoshopPng } from './transfers.js';
 import { reblendOutpaint } from './outpaint.js';
 import { cancelTask, retryTasks } from './jobs.js';
-import { askConfirm, guard, notify } from '../ui/dialogs.js';
+import { askConfirm, guard, notify, setStatus } from '../ui/dialogs.js';
 import { openEditor } from './editor.js';
 import { renderAgentRuns, continueWithAgent } from './agent.js';
 import { syncAgentRuns } from '../core/agent-budget.js';
@@ -188,8 +188,13 @@ function setSelectionMode(value) {
   if (!value) state.selection.clear();
   render();
 }
-function deleteTasks(tasks) {
+function draftUsesTasks(ids) {
+  return ids.has(state.parentId) || ids.has(state.editQueuedId) ||
+    state.refs.some((ref) => ids.has(ref.versionId));
+}
+function deleteTasks(tasks, clearDraft = false) {
   const ids = new Set(tasks.filter((t) => !active(t)).map((t) => t.id));
+  const reset = clearDraft || draftUsesTasks(ids);
   for (const id of ids) {
     const t = taskById(id);
     if (!t) continue;
@@ -212,8 +217,9 @@ function deleteTasks(tasks) {
     );
     if (orphan) state.tasks = state.tasks.filter((t) => t.id !== orphan.id);
   } while (orphan);
+  const saved = reset ? resetDraftContent() : persist();
   render();
-  persist();
+  return saved;
 }
 async function handleAction(t, action) {
   if (action === 'agent') await continueWithAgent(t);
@@ -249,11 +255,12 @@ async function handleAction(t, action) {
     if (
       await askConfirm(
         '删除这张记录？',
-        '图片和参考素材会从这条记录移除；有后续分支时会保留版本关系。',
+        '图片和参考素材会从这条记录移除；有后续分支时会保留版本关系。' +
+          (draftUsesTasks(new Set([t.id])) ? ' 正在使用该版本的草稿也会清空。' : ''),
         '删除',
       )
     )
-      deleteTasks([t]);
+      await deleteTasks([t]);
   }
   if (action === 'copy') {
     try {
@@ -354,11 +361,12 @@ function mountFeaturesGallery() {
       tasks.length &&
       (await askConfirm(
         `删除 ${tasks.length} 张记录？`,
-        '只删除已结束的记录，进行中的任务会保留。',
+        '只删除已结束的记录，进行中的任务会保留。' +
+          (draftUsesTasks(new Set(tasks.map((task) => task.id))) ? ' 正在使用这些版本的草稿也会清空。' : ''),
         '删除',
       ))
     )
-      deleteTasks(tasks);
+      await deleteTasks(tasks);
   });
   $('clearBtn').onclick = guard(async () => {
     const tasks = state.tasks.filter(
@@ -371,14 +379,18 @@ function mountFeaturesGallery() {
       notify('没有可清理的已结束记录。');
       return;
     }
-    if (
-      await askConfirm(
-        '清理已结束的记录？',
-        `将清理${state.projectFilter === 'all' ? '全部项目' : projectName(state.projectFilter)}中的 ${tasks.length} 张记录。请先下载需要的图片。`,
-        '清空记录',
-      )
-    )
-      deleteTasks(tasks);
+    const project = state.projectFilter;
+    const clearDraft = project === 'all' || $('draftProject').value === project ||
+      draftUsesTasks(new Set(tasks.map((task) => task.id)));
+    const draftNotice = clearDraft ? ' 当前草稿也会清空，包括提示词、参考图和保留要求。' : '';
+    if (await askConfirm(
+      '清理已结束的记录？',
+      `将清理${project === 'all' ? '全部项目' : projectName(project)}中的 ${tasks.length} 张记录。${draftNotice}请先下载需要的图片。`,
+      '清空记录',
+    )) {
+      const saved = await deleteTasks(tasks, clearDraft);
+      if (clearDraft) setStatus(saved ? '记录与当前草稿已清空，可以开始新的创作。' : '当前草稿已清空，但浏览器未能保存本次清理。', !saved);
+    }
   });
 }
 export {
