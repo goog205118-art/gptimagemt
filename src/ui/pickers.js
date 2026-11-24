@@ -126,7 +126,7 @@ function ratioInfo(value) {
       auto: true,
     };
   const match = value.match(/^(\d+)x(\d+)$/);
-  if (!match)
+  if (!match || Number(match[1]) <= 0 || Number(match[2]) <= 0)
     return {
       label: value,
       detail: '自定义',

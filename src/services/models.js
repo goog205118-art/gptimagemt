@@ -5,6 +5,8 @@ import { state } from '../core/state.js';
 import { syncPickers } from '../ui/pickers.js';
 import { effectivePrompt } from '../features/jobs.js';
 import { scheduleDraft, updateSend } from '../features/composer.js';
+import { imageSizeRules, imageSizeError, validGptSize } from '../../shared/image-sizes.js';
+import { initializeImageSizeControls, syncImageSizeControls } from '../features/image-size.js';
 function isOpenLuxBase(base) {
   try {
     return ['api.openlux.ai', 'api.openlux.uk'].includes(new URL(base).hostname);
@@ -34,7 +36,8 @@ function gptProfile(id) {
       : ['low', 'medium', 'high', 'auto'],
     maxRefs: core === 'gpt-image-2-c' ? 5 : 16,
     maxPrompt: v25 ? 1000 : 32000,
-    flexible: v2 || v25 || core === 'chatgpt-image-latest',
+    flexible: imageSizeRules(id).flexible,
+    sizeRules: imageSizeRules(id),
     timeout: v25 ? (core.includes('sunburst') ? 900 : 600) : 300,
     fidelity: v15 ? 'high' : mini ? 'low' : core === 'gpt-image-1' ? 'high' : null,
   };
@@ -116,13 +119,14 @@ function applyGptProfile(normalize = false) {
         option.disabled = false;
         continue;
       }
-      option.disabled = !validGptSize(option.value, profile);
+      option.disabled = !validGptSize(option.value, profile.sizeRules);
     }
     const protectedMask = state.mask && state.mask.keepOutside !== false;
     for (const option of $('format').options)
       option.disabled = !!protectedMask && option.value !== 'png';
     if (protectedMask) $('format').value = 'png';
-    if (normalize && $('size').selectedOptions[0]?.disabled) $('size').value = 'auto';
+    // Keep invalid imports and unfinished input visible until the user fixes them.
+    syncImageSizeControls(profile);
     $('modelProfileHint').textContent = profile.v25
       ? `${profile.core.includes('sunburst') ? 'Sunburst · 精修优先' : 'Flare · 日常出图'} · 支持 2K / 4K、超高清与最高质量。${profile.compat ? 'C 路线以实际渠道能力为准。' : ''}`
       : profile.v2
@@ -148,24 +152,6 @@ function applyGptProfile(normalize = false) {
     applyingGptProfile = false;
   }
 }
-function validGptSize(size, profile) {
-  if (size === 'auto') return true;
-  const m = String(size).match(/^(\d+)x(\d+)$/);
-  if (!m) return false;
-  const w = Number(m[1]),
-    h = Number(m[2]);
-  if (!profile.flexible) return ['1024x1024', '1536x1024', '1024x1536'].includes(size);
-  return (
-    w % 16 === 0 &&
-    h % 16 === 0 &&
-    w > 0 &&
-    h > 0 &&
-    Math.max(w, h) <= 3840 &&
-    Math.max(w, h) / Math.min(w, h) <= 3 &&
-    w * h >= 655360 &&
-    w * h <= 8294400
-  );
-}
 function validateGptTask(t) {
   const s = t.settings,
     id = s.model + s.route;
@@ -180,10 +166,8 @@ function validateGptTask(t) {
     );
   if (!p.qualities.includes(s.quality))
     throw new Error(`${p.label} 不支持 ${s.quality} 质量，请重新选择。`);
-  if (!validGptSize(s.size, p))
-    throw new Error(
-      `${p.label} 不支持当前尺寸。2.0 / 2.5 要求两边为 16 的倍数、像素 655360–8294400；旧版使用标准三种尺寸。`,
-    );
+  const sizeError = imageSizeError(s.size, p.sizeRules);
+  if (sizeError) throw new Error(`${p.label}：${sizeError}`);
   if (t.refs.length > p.maxRefs)
     throw new Error(`${p.label} 最多支持 ${p.maxRefs} 张参考图，请减少参考图。`);
   const prompt = t.effectivePrompt || effectivePrompt(t);
@@ -215,6 +199,10 @@ function rebuildModelControls() {
   applyGptProfile(true);
 }
 function initializeModelControls() {
+  initializeImageSizeControls(() => {
+    updateSend();
+    scheduleDraft();
+  });
   rebuildModelControls();
   $('model').addEventListener('change', () => {
     applyGptProfile(true);
@@ -238,4 +226,5 @@ export {
   isOpenLuxBase,
   setGptModelInventory,
   validateGptTask,
+  validGptSize,
 };

@@ -20,6 +20,14 @@ test('A01 explicit count, square, reference roles and Logo constraints cannot dr
   assert.equal(unlabelled.references[0].role, 'subject');
   assert.equal(unlabelled.values.count, 11);
 });
+test('custom decimal ratios remain exact user requirements instead of matching a fractional suffix', () => {
+  for (const ratio of ['2.35:1', '0.5:1', '2560:1440', '16:9']) {
+    const locks = captureRequirements(snapshot, `一张海报，比例 ${ratio}`);
+    assert.equal(locks.values.ratio, ratio);
+    assert.ok(requirementConflicts({ ...plan, size: '1024x1024' }, locks).some((conflict) => conflict.field === 'ratio'));
+  }
+});
+
 test('A02 selected branch inherits original confirmed wording and source without changing ancestor', () => {
   const inherited = { values: { constraints: '保留蓝色 Logo', exactText: 'Made in USA.' }, sources: { constraints: { kind: 'user', text: '保留蓝色 Logo' } } };
   const saved = structuredClone(inherited);

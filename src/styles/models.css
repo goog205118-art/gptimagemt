@@ -98,6 +98,46 @@
 .parameter-pane #promptBudget {
   margin-top: -6px;
 }
+.custom-size-controls summary {
+  cursor: pointer;
+  padding-block: 6px;
+  font-size: 13px;
+}
+.custom-size-body {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+.custom-size-body label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+}
+.custom-size-body input[type="number"] {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 16px;
+}
+.custom-size-body input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.custom-size-body .parameter-help,
+.parameter-field #sizeRules,
+.parameter-field #sizeFeedback {
+  margin: 0;
+}
+.size-feedback {
+  overflow-wrap: anywhere;
+}
+.size-feedback.is-error {
+  color: var(--danger);
+}
 .result-warning {
   font-size: 12px;
   line-height: 1.7;

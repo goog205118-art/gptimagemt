@@ -1,5 +1,6 @@
 import test, { before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { imageSizeRules } from '../shared/image-sizes.js';
 import { createServer } from 'node:http';
 import agent from '../api/agent.js';
 import {
@@ -103,6 +104,21 @@ test('structured plan preserves every reference and rejects invented models, exc
   );
   assert.throws(() => normalizePlan({ ...plan, size: 'auto' }, { ...context, hasMask: true }));
 });
+test('custom Agent dimensions are validated by model rules, including forged legacy capabilities', () => {
+  const customContext = {
+    ...context,
+    availableModels: [{ ...context.availableModels[0], sizeRules: imageSizeRules('gpt-image-2') }],
+  };
+  assert.equal(normalizePlan({ ...plan, size: '2000x2000' }, customContext).size, '2000x2000');
+  for (const size of ['1920x1080', '512x512', '4000x1024', '3072x3072', '2048x640']) {
+    assert.throws(() => normalizePlan({ ...plan, size }, customContext), /尺寸或质量/);
+    const forged = { ...customContext, availableModels: [{ ...customContext.availableModels[0], sizes: [size] }] };
+    assert.throws(() => normalizePlan({ ...plan, size }, forged), /尺寸或质量/);
+  }
+  const forgedLegacy = { ...customContext, availableModels: [{ ...customContext.availableModels[0], id: 'gpt-image-1.5', sizes: ['2000x2000'] }] };
+  assert.throws(() => normalizePlan({ ...plan, model: 'gpt-image-1.5', size: '2000x2000' }, forgedLegacy));
+});
+
 test('questions are bounded per round, never by round count; incomplete or refused Responses never become ready', () => {
   const question = {
     decision: 'clarify',

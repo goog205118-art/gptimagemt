@@ -89,6 +89,7 @@ function availableModels(ids, snapshot) {
         qualities: profile.qualities,
         maxPrompt: profile.maxPrompt,
         maxRefs: profile.maxRefs,
+        sizeRules: profile.sizeRules,
         sizes: sizes.filter((size) => {
           try {
             validateGptTask({
@@ -442,7 +443,7 @@ function fillPlanOptions(plan, run) {
   const profile = run.context.availableModels.find((m) => m.id === plan.model);
   if (!profile) return;
   for (const [field, values, selected] of [
-    ['agentPlanSize', profile.sizes, plan.size],
+    ['agentPlanSize', [...new Set([...profile.sizes, plan.size])], plan.size],
     ['agentPlanQuality', profile.qualities, plan.quality],
   ]) {
     $(field).innerHTML = values

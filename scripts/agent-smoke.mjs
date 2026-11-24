@@ -203,6 +203,7 @@ try {
   await page.locator('#agentExecute').click();
   assert.match(await page.locator('#agentPlanError').innerText(), /划选/);
   await page.locator('#agentPrepareOperation').click();
+  await page.locator('#editorCanvas').waitFor({ state: 'visible' });
   const canvas = await page.locator('#editorCanvas').boundingBox();
   await page.mouse.move(canvas.x + canvas.width * 0.45, canvas.y + canvas.height * 0.45);
   await page.mouse.down(); await page.mouse.move(canvas.x + canvas.width * 0.55, canvas.y + canvas.height * 0.55); await page.mouse.up();

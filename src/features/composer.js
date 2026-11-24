@@ -17,6 +17,7 @@ import { renderRefs } from './references.js';
 import { money, priceFor } from '../services/pricing.js';
 import { pump } from './jobs.js';
 import { getAgentConnection } from '../services/agent.js';
+import { imageSizeError } from '../../shared/image-sizes.js';
 function syncComposerModes() {
   const agent = state.agentMode;
   $('agentModeBtn').setAttribute('aria-pressed', String(agent));
@@ -163,7 +164,8 @@ function updateSend() {
   if (state.agentMode) $('sendLabel').textContent = 'Agent 规划需求';
   $('genBtn').setAttribute('aria-label', $('sendLabel').textContent);
   $('genBtn').title = $('sendLabel').textContent + '（Ctrl / ⌘ + Enter）';
-  $('genBtn').disabled = !state.ready || state.adding > 0 || state.submitting;
+  $('genBtn').disabled = !state.ready || state.adding > 0 || state.submitting ||
+    !!imageSizeError($('size').value, $('model').value);
   const price = priceFor(settingsSnapshot());
   $('estimate').textContent =
     `本次 ${total} 张${price !== null ? ' · 估算 ' + money(total * price) : ''} · 每张独立请求${state.mask ? ' · 已附局部编辑蒙版' : ''}`;

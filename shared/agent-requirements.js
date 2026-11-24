@@ -18,8 +18,8 @@ export function captureRequirements(snapshot, request, inherited = null) {
   if (count) explicit('count', Number.isFinite(Number(count[1])) ? Number(count[1]) : ({ 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 })[count[1]]);
   const size = request.match(/\b(\d{3,4})\s*[x×]\s*(\d{3,4})\b/i);
   if (size) explicit('size', `${size[1]}x${size[2]}`);
-  const ratio = request.match(/\b([1-9]\d?)\s*[:：]\s*([1-9]\d?)\b/);
-  if (ratio) explicit('ratio', `${Number(ratio[1])}:${Number(ratio[2])}`);
+  const ratio = request.match(/(?<![\d.])(\d+(?:\.\d+)?)\s*[:：]\s*(\d+(?:\.\d+)?)(?![\d.])/);
+  if (ratio && Number(ratio[1]) > 0 && Number(ratio[2]) > 0) explicit('ratio', `${Number(ratio[1])}:${Number(ratio[2])}`);
   else if (/正方形|方图/.test(request)) explicit('ratio', '1:1');
   const format = request.match(/\b(png|jpeg|jpg|webp)\b/i);
   if (format) explicit('format', format[1].toLowerCase().replace('jpg', 'jpeg'));
