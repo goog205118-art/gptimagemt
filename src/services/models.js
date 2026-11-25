@@ -1,4 +1,4 @@
-import { GPT_SEED_MODELS, splitGptModel, isGptImageModel } from '../../shared/model-ids.js';
+import { GPT_ROUTE_SUFFIXES, GPT_SEED_MODELS, splitGptModel, isGptImageModel } from '../../shared/model-ids.js';
 import { $ } from '../core/dom.js';
 import { escapeHTML } from '../core/utils.js';
 import { state } from '../core/state.js';
@@ -76,16 +76,30 @@ function setGptModelInventory(ids, base, checkedAt = Date.now()) {
     base,
     checkedAt,
   };
-  applyGptProfile(true);
+  applyGptProfile();
   syncPickers();
   return clean;
 }
+function syncRouteOptions(model) {
+  const route = $('route'), catalog = state.prefs.gptCatalog;
+  const ids = state.key && catalog?.base === state.base ? catalog.ids : [];
+  const variants = ids.includes(model) && !splitGptModel(model).route
+    ? GPT_ROUTE_SUFFIXES.filter((suffix) => ids.includes(model + suffix))
+    : [];
+  const previous = route.value;
+  if (Array.from(route.options).slice(1).map((option) => option.value).join() !== variants.join()) {
+    route.replaceChildren(new Option('默认路由', ''), ...variants.map((suffix) => new Option(suffix.slice(1), suffix)));
+    route.value = variants.includes(previous) ? previous : '';
+  }
+  $('routeField').hidden = variants.length === 0;
+}
 let applyingGptProfile = false;
-function applyGptProfile(normalize = false) {
+function applyGptProfile() {
   if (applyingGptProfile) return;
   applyingGptProfile = true;
   try {
     const id = $('model').value;
+    syncRouteOptions(id);
     if (!isGptImageModel(id)) return;
     const profile = gptProfile(id),
       quality = $('quality'),
@@ -106,14 +120,6 @@ function applyGptProfile(normalize = false) {
         .join('');
       quality.value = profile.qualities.includes(oldQuality) ? oldQuality : 'high';
     }
-    const catalog = state.prefs.gptCatalog,
-      known = catalog?.base === state.base ? catalog.ids : null,
-      modelHasRoute = !!splitGptModel(id).route;
-    for (const option of $('route').options)
-      if (option.value) {
-        option.disabled = modelHasRoute || !known?.includes(id + option.value);
-      }
-    if (normalize && $('route').selectedOptions[0]?.disabled) $('route').value = '';
     for (const option of $('size').options) {
       if (option.value === 'auto') {
         option.disabled = false;
@@ -147,6 +153,8 @@ function validateGptTask(t) {
   if (splitGptModel(s.model).route && s.route)
     throw new Error('模型 ID 已包含路由后缀，请使用默认路由。');
   const catalog = state.prefs.gptCatalog;
+  if (s.route && catalog?.base !== s.base)
+    throw new Error('请先读取当前连接的 GPT 生图模型清单，再使用额外路由。');
   if (catalog?.base === s.base && !catalog.ids.includes(id))
     throw new Error(
       '当前模型或路由不在最近读取的可用 GPT 生图清单中，请重新读取模型或选择默认路由。',
@@ -183,7 +191,7 @@ function rebuildModelControls() {
   for (const size of ['2048x2048', '2048x1152', '3840x2160'])
     if (!Array.from($('size').options).some((o) => o.value === size))
       $('size').add(new Option(size, size));
-  applyGptProfile(true);
+  applyGptProfile();
 }
 function initializeModelControls() {
   initializeImageSizeControls(() => {
@@ -192,7 +200,7 @@ function initializeModelControls() {
   });
   rebuildModelControls();
   $('model').addEventListener('change', () => {
-    applyGptProfile(true);
+    applyGptProfile();
     const p = gptProfile($('model').value),
       timeout = $('timeout');
     if (Number(timeout.value) === Number(timeout.dataset.recommended || 300))
@@ -201,7 +209,7 @@ function initializeModelControls() {
     updateSend();
     scheduleDraft();
   });
-  applyGptProfile(true);
+  applyGptProfile();
 }
 export {
   applyGptProfile,

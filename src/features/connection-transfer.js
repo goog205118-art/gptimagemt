@@ -162,7 +162,7 @@ async function applyConnection(connection) {
   rebuildModelControls();
   applySettings(preferences.generation);
   if (preferences.generation?.n) $('n').value = preferences.generation.n;
-  applyGptProfile(true);
+  applyGptProfile();
   captureDraft();
   updateSend();
   render();

@@ -39,7 +39,7 @@ function addModel(model) {
     );
   setSelect('model', model);
   if (!state.prefs.customModels.includes(model)) state.prefs.customModels.push(model);
-  applyGptProfile(true);
+  applyGptProfile();
 }
 async function fetchGptModelCatalog(base, key) {
   let data;
@@ -69,13 +69,15 @@ function mountServicesConnection() {
   $('settingsForm').onsubmit = guard(async (e) => {
     e.preventDefault();
     const base = parseBase($('baseInput').value),
+      key = $('keyInput').value.trim(),
       prices = parsePriceRules($('priceRules').value);
-    if (base !== state.base || $('keyInput').value.trim() !== state.key) {
+    if (base !== state.base || key !== state.key) {
       state.prefs.agentConfirmed = false;
       state.prefs.gptCatalog = null;
     }
     state.base = base;
-    state.key = $('keyInput').value.trim();
+    state.key = key;
+    applyGptProfile();
     if (!storageSet('openlux_key', $('rememberKey').checked && state.key ? state.key : null))
       notify('浏览器未能更新保存的 Key。');
     storageSet('openlux_base', base);
@@ -99,11 +101,13 @@ function mountServicesConnection() {
     const key = $('keyInput').value.trim(),
       base = parseBase($('baseInput').value);
     if (!key) throw new Error('先填写 API Key。');
+    if (key !== state.key || base !== state.base)
+      throw new Error('请先保存这组连接，再读取 GPT 生图模型。');
     $('modelsStatus').textContent = '正在读取…';
     $('fetchModels').disabled = true;
     try {
       const { ids, filteredCount } = await fetchGptModelCatalog(base, key);
-      if ($('keyInput').value.trim() !== key || parseBase($('baseInput').value) !== base) return;
+      if (state.key !== key || state.base !== base) return;
       const models = setGptModelInventory(ids, base);
       await persist();
       $('modelsStatus').textContent =

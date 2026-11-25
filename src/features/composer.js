@@ -71,8 +71,12 @@ function setSelect(id, value) {
 }
 function applySettings(settings) {
   if (settings?.model != null) setSelect('model', settings.model);
-  applyGptProfile(false);
-  for (const id of ['route', 'size', 'quality', 'format', 'background'])
+  applyGptProfile();
+  if (settings?.route != null)
+    $('route').value = Array.from($('route').options).some((option) => option.value === settings.route)
+      ? settings.route
+      : '';
+  for (const id of ['size', 'quality', 'format', 'background'])
     if (settings?.[id] != null) setSelect(id, settings[id]);
   for (const id of ['timeout', 'compression'])
     if (settings?.[id] != null) $(id).value = settings[id];
@@ -150,7 +154,7 @@ function variantsList() {
 function updateSend() {
   syncComposerModes();
   updateComposerPeek();
-  applyGptProfile(false);
+  applyGptProfile();
   const n = numeric('n', 1, 4, 1),
     variants = variantsList(),
     total = state.editQueuedId ? 1 : n * variants.length;

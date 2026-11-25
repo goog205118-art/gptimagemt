@@ -109,7 +109,7 @@ async function init() {
   if (state.draft.parentId && (!parent || !existing(parent)))
     state.draft = { ...state.draft, ...emptyDraftContent() };
   restoreDraft(state.draft);
-  applyGptProfile(true);
+  applyGptProfile();
   if (
     state.editQueuedId &&
     !['queued', 'retry_wait'].includes(taskById(state.editQueuedId)?.status)
