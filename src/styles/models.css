@@ -92,48 +92,76 @@
   margin-top: 0;
   line-height: 1.7;
 }
-.parameter-pane #qualityNote {
-  margin: -8px 0 0;
-}
 .parameter-pane #promptBudget {
   margin-top: -6px;
 }
-.custom-size-controls summary {
-  cursor: pointer;
-  padding-block: 6px;
-  font-size: 13px;
-}
-.custom-size-body {
-  display: grid;
-  gap: 12px;
-  padding-top: 12px;
-}
-.custom-size-body label {
+.custom-size-controls {
   display: grid;
   gap: 6px;
-  min-width: 0;
-  color: var(--muted);
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
-.custom-size-body input[type="number"] {
+.custom-size-row {
+  display: grid;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.custom-pixels {
+  grid-template-columns: 16px minmax(0, 1fr) 8px minmax(0, 1fr) 18px;
+}
+.custom-ratio {
+  grid-template-columns: 16px minmax(0, 1fr) 6px minmax(0, 1fr) 16px minmax(0, 1.35fr) 34px;
+}
+.custom-size-row > svg {
+  width: 16px;
+  height: 16px;
+}
+.custom-size-row > span {
+  text-align: center;
+}
+.custom-size-row input[type="number"] {
+  appearance: textfield;
   width: 100%;
   min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--strong);
+  height: 34px;
+  padding: 4px;
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
   font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
-.custom-size-body input[aria-invalid="true"] {
-  border-color: var(--danger);
-}
-.custom-size-body .parameter-help,
-.parameter-field #sizeRules,
-.parameter-field #sizeFeedback {
+.custom-size-row input::-webkit-inner-spin-button,
+.custom-size-row input::-webkit-outer-spin-button {
+  appearance: none;
   margin: 0;
 }
-.size-feedback {
+.custom-size-row input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.custom-size-row input:disabled {
+  color: var(--muted);
+  background: var(--soft);
+}
+.custom-size-row #calculateSize {
+  width: 34px;
+  height: 34px;
+  background: var(--soft);
+}
+.custom-size-row #calculateSize:hover:not(:disabled) {
+  background: var(--line);
+}
+.custom-size-controls #sizeFeedback {
+  margin: 0;
   overflow-wrap: anywhere;
+}
+#sizeFeedback:empty,
+.composer-dock .hint:has(.status:empty) {
+  display: none;
 }
 .size-feedback.is-error {
   color: var(--danger);

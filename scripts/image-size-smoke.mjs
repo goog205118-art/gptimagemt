@@ -33,7 +33,8 @@ await page.addInitScript(() => localStorage.setItem('openlux_key', 'isolated-ima
 async function openSettings() {
   await page.locator('#composerPeek').dispatchEvent('click');
   await page.locator('#advancedToggle').click();
-  await page.locator('#customSizeControls summary').click();
+  assert.equal(await page.locator('#customSizeControls').evaluate((element) => element.tagName), 'DIV');
+  assert.equal(await page.locator('#customWidth').isVisible(), true);
 }
 async function sizeValue() { return page.locator('#size').inputValue(); }
 async function setDimensions(width, height) {
@@ -46,7 +47,7 @@ try {
   await openSettings();
   await setDimensions(2000, 2000);
   assert.equal(await sizeValue(), '2000x2000');
-  assert.match(await page.locator('#sizeFeedback').innerText(), /1:1.*实验性/);
+  assert.equal(await page.locator('#sizeFeedback').textContent(), '');
   assert.equal(await page.locator('#genBtn').isDisabled(), false);
   for (const [width, height, reason] of [[1920, 1080, /16/], [4000, 1024, /3840/], [512, 512, /655,360/], [3072, 3072, /8,294,400/], [2048, 640, /3:1/], [0, 0, /大于 0/]]) {
     await setDimensions(width, height);
@@ -62,7 +63,7 @@ try {
   await page.locator('#customLongEdge').fill('2048');
   await page.locator('#calculateSize').click();
   assert.equal(await sizeValue(), '2048x1152');
-  assert.match(await page.locator('#sizeFeedback').innerText(), /16:9/);
+  assert.equal(await page.locator('#sizeFeedback').textContent(), '');
   assert.equal(await page.locator('#customWidth').inputValue(), '2048');
   await page.locator('#customRatioWidth').fill('2.35');
   await page.locator('#customRatioHeight').fill('1');
@@ -123,7 +124,7 @@ try {
   assert.equal(requests.length, 1);
   await openSettings();
   await page.screenshot({ path: `${out}/desktop.png` });
-  for (const [width, height, name] of [[390, 844, 'mobile'], [844, 390, 'landscape']]) {
+  for (const [width, height, name] of [[390, 844, 'mobile'], [320, 640, 'narrow'], [844, 390, 'landscape']]) {
     await page.setViewportSize({ width, height });
     await page.locator('#calculateSize').scrollIntoViewIfNeeded();
     const overflow = await page.evaluate(() => {

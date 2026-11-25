@@ -137,9 +137,6 @@ function applyGptProfile(normalize = false) {
             ? 'GPT Image 1 mini · 使用低输入保真，适合轻量草稿。'
             : '旧版兼容路线，是否可用以当前 Key 和服务商为准。';
     $('modelProfileHint').hidden = false;
-    $('qualityNote').textContent = profile.v25
-      ? '超高清 / 最高质量的耗时和费用更高。'
-      : '按当前模型提供可用质量档。';
     $('modelTimeoutHint').textContent = `此模型建议超时 ${profile.timeout} 秒。`;
     $('promptBudget').textContent = profile.v25
       ? 'OpenLux 2.5：完整提示词上限 1000 字符（含参考说明）。'

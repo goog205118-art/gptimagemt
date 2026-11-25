@@ -601,9 +601,6 @@ input[type="number"],
   font-size: 12px;
   line-height: 1.6;
 }
-.hint kbd {
-  font: inherit;
-}
 .status {
   min-height: 18px;
 }
@@ -754,9 +751,6 @@ dialog .field label {
   }
   .composer-dock {
     padding-bottom: 12px;
-  }
-  .hint .shortcut {
-    display: none;
   }
 }
 @media (max-width: 540px) {

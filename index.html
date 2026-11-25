@@ -417,35 +417,27 @@
                       role="group"
                       aria-labelledby="ratioLabel"
                     ></div>
-                    <p class="parameter-help" id="sizeRules"></p>
-                    <details class="custom-size-controls" id="customSizeControls">
-                      <summary>自定义分辨率与比例</summary>
-                      <div class="custom-size-body">
-                        <div class="parameter-two-col">
-                          <label for="customWidth">宽度（px）
-                            <input id="customWidth" type="number" inputmode="numeric" min="16" max="3840" step="16" value="1024" aria-describedby="sizeRules sizeFeedback">
-                          </label>
-                          <label for="customHeight">高度（px）
-                            <input id="customHeight" type="number" inputmode="numeric" min="16" max="3840" step="16" value="1024" aria-describedby="sizeRules sizeFeedback">
-                          </label>
-                        </div>
-                        <p class="parameter-help">宽高修改后立即生效；不符合模型规则时无法生成。</p>
-                        <div class="parameter-two-col">
-                          <label for="customRatioWidth">比例 · 宽
-                            <input id="customRatioWidth" type="number" inputmode="decimal" min="0.01" step="any" value="1">
-                          </label>
-                          <label for="customRatioHeight">比例 · 高
-                            <input id="customRatioHeight" type="number" inputmode="decimal" min="0.01" step="any" value="1">
-                          </label>
-                        </div>
-                        <label for="customLongEdge">目标长边（px）
-                          <input id="customLongEdge" type="number" inputmode="numeric" min="16" max="3840" step="16" value="1024">
-                        </label>
-                        <button type="button" class="btn outlined" id="calculateSize">按比例换算并应用</button>
-                        <p class="parameter-help">换算会对齐到合规尺寸，实际比例可能略有调整，以当前尺寸为准。</p>
+                    <div class="custom-size-controls" id="customSizeControls" role="group" aria-label="自定义尺寸与比例">
+                      <div class="custom-size-row custom-pixels">
+                        <svg aria-hidden="true"><use href="#i-dimensions" /></svg>
+                        <input id="customWidth" type="number" inputmode="numeric" min="16" max="3840" step="16" value="1024" placeholder="宽" aria-label="宽度（px）" aria-describedby="sizeFeedback" title="宽度（px）">
+                        <span aria-hidden="true">×</span>
+                        <input id="customHeight" type="number" inputmode="numeric" min="16" max="3840" step="16" value="1024" placeholder="高" aria-label="高度（px）" aria-describedby="sizeFeedback" title="高度（px）">
+                        <span aria-hidden="true">px</span>
                       </div>
-                    </details>
-                    <p class="parameter-help size-feedback" id="sizeFeedback" role="status" aria-live="polite"></p>
+                      <div class="custom-size-row custom-ratio">
+                        <svg aria-hidden="true"><use href="#i-ratio" /></svg>
+                        <input id="customRatioWidth" type="number" inputmode="decimal" min="0.01" step="any" value="1" placeholder="宽" aria-label="比例宽" aria-describedby="sizeFeedback" title="比例宽">
+                        <span aria-hidden="true">:</span>
+                        <input id="customRatioHeight" type="number" inputmode="decimal" min="0.01" step="any" value="1" placeholder="高" aria-label="比例高" aria-describedby="sizeFeedback" title="比例高">
+                        <svg aria-hidden="true"><use href="#i-long-edge" /></svg>
+                        <input id="customLongEdge" type="number" inputmode="numeric" min="16" max="3840" step="16" value="1024" placeholder="长边" aria-label="目标长边（px）" aria-describedby="sizeFeedback" title="目标长边（px）">
+                        <button type="button" class="icon-btn" id="calculateSize" aria-label="换算并应用比例" title="换算并应用比例">
+                          <svg aria-hidden="true"><use href="#i-check" /></svg>
+                        </button>
+                      </div>
+                      <p class="parameter-help size-feedback" id="sizeFeedback" role="status"></p>
+                    </div>
                   </div>
                   <div class="parameter-field inline-field">
                     <label id="qualityLabel" for="quality">质量</label
@@ -480,7 +472,6 @@
                       aria-labelledby="countLabel"
                     ></div>
                   </div>
-                  <p class="parameter-help" id="qualityNote"></p>
                   <details class="preserve-details">
                     <summary>保持哪些内容</summary>
                     <input
@@ -662,11 +653,7 @@
               </div>
             </div>
           </form>
-          <div class="hint">
-            <span class="status" id="status" role="status"
-              >拖入 / 粘贴参考图 · 可连续提交，并行生成</span
-            ><span class="shortcut"><kbd>Ctrl / ⌘ + Enter</kbd> 生成</span>
-          </div>
+          <div class="hint"><span class="status" id="status" role="status"></span></div>
         </section>
       </main>
       <section class="agent-activity" id="agentActivity" aria-labelledby="agentActivityTitle" inert>

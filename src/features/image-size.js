@@ -4,6 +4,13 @@ import {
 } from '../../shared/image-sizes.js';
 
 let lastSize, notifyChange;
+const flexibleHint = '宽高为 16 的倍数，单边 ≤3840；比例 1:3–3:1；总像素 655,360–8,294,400。';
+const standardHint = '当前模型仅支持预设尺寸。切换 GPT Image 2 / 2.5 可自定义尺寸。';
+
+function showSizeFeedback(message, error = false) {
+  $('sizeFeedback').textContent = message;
+  $('sizeFeedback').classList.toggle('is-error', error);
+}
 const model = () => $('model').value;
 
 function selectSize(size) {
@@ -36,13 +43,12 @@ export function syncImageSizeControls(profile) {
       $('customLongEdge').value = Math.max(dimensions.width, dimensions.height);
     }
   }
-  for (const input of $('customSizeControls').querySelectorAll('input, button')) input.disabled = !profile.flexible;
-  $('sizeRules').textContent = profile.flexible
-    ? '宽高为 16 的倍数，单边 ≤3840；比例 1:3–3:1；总像素 655,360–8,294,400。'
-    : '当前模型仅支持自动或标准三种尺寸。切换 GPT Image 2 / 2.5 可自定义宽高和比例。';
+  const controls = $('customSizeControls');
+  const highResolution = experimentalImageSize(size, profile.sizeRules) ? ' 实验性高分辨率。' : '';
+  controls.title = profile.flexible ? flexibleHint + highResolution : standardHint;
+  for (const input of controls.querySelectorAll('input, button')) input.disabled = !profile.flexible;
   const error = imageSizeError(size, profile.sizeRules);
-  $('sizeFeedback').textContent = error || (size === 'auto' ? '由模型自动选择尺寸。' : `当前：${dimensions.width} × ${dimensions.height} · ${imageSizeRatio(size)}${experimentalImageSize(size, profile.sizeRules) ? ' · 实验性高分辨率' : ''}`);
-  $('sizeFeedback').classList.toggle('is-error', !!error);
+  showSizeFeedback(error, !!error);
   for (const id of ['customWidth', 'customHeight']) $(id).setAttribute('aria-invalid', String(!!error));
 }
 
@@ -53,16 +59,18 @@ export function initializeImageSizeControls(onChange) {
   });
   $('calculateSize').addEventListener('click', () => {
     try {
-      const size = sizeFromRatio($('customRatioWidth').value, $('customRatioHeight').value, $('customLongEdge').value, model());
+      const ratioWidth = Number($('customRatioWidth').value);
+      const ratioHeight = Number($('customRatioHeight').value);
+      const longEdge = Number($('customLongEdge').value);
+      const size = sizeFromRatio(ratioWidth, ratioHeight, longEdge, model());
       const { width, height } = parseImageSize(size);
       $('customWidth').value = width;
       $('customHeight').value = height;
       selectSize(size);
-      const feedback = $('sizeFeedback');
-      feedback.textContent += '。已按模型规则换算，请核对实际尺寸和比例。';
+      if (width * ratioHeight !== height * ratioWidth || Math.max(width, height) !== longEdge)
+        showSizeFeedback(`已对齐为 ${width} × ${height} · ${imageSizeRatio(size)}`);
     } catch (error) {
-      $('sizeFeedback').textContent = `${error.message} 未应用，当前仍为 ${$('size').value}。`;
-      $('sizeFeedback').classList.add('is-error');
+      showSizeFeedback(error.message, true);
     }
   });
 }
