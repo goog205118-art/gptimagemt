@@ -425,16 +425,21 @@
                         <input id="customHeight" type="number" inputmode="numeric" min="16" max="3840" step="16" value="1024" placeholder="高" aria-label="高度（px）" aria-describedby="sizeFeedback" title="高度（px）">
                         <span aria-hidden="true">px</span>
                       </div>
-                      <div class="custom-size-row custom-ratio">
-                        <svg aria-hidden="true"><use href="#i-ratio" /></svg>
-                        <input id="customRatioWidth" type="number" inputmode="decimal" min="0.01" step="any" value="1" placeholder="宽" aria-label="比例宽" aria-describedby="sizeFeedback" title="比例宽">
-                        <span aria-hidden="true">:</span>
-                        <input id="customRatioHeight" type="number" inputmode="decimal" min="0.01" step="any" value="1" placeholder="高" aria-label="比例高" aria-describedby="sizeFeedback" title="比例高">
-                        <svg aria-hidden="true"><use href="#i-long-edge" /></svg>
-                        <input id="customLongEdge" type="number" inputmode="numeric" min="16" max="3840" step="16" value="1024" placeholder="长边" aria-label="目标长边（px）" aria-describedby="sizeFeedback" title="目标长边（px）">
-                        <button type="button" class="icon-btn" id="calculateSize" aria-label="换算并应用比例" title="换算并应用比例">
-                          <svg aria-hidden="true"><use href="#i-check" /></svg>
-                        </button>
+                      <div class="custom-size-conversion">
+                        <div class="custom-size-row custom-ratio">
+                          <svg aria-hidden="true"><use href="#i-ratio" /></svg>
+                          <input id="customRatioWidth" type="number" inputmode="decimal" min="0.01" step="any" value="1" placeholder="宽" aria-label="比例宽" aria-describedby="sizeFeedback" title="比例宽">
+                          <span aria-hidden="true">:</span>
+                          <input id="customRatioHeight" type="number" inputmode="decimal" min="0.01" step="any" value="1" placeholder="高" aria-label="比例高" aria-describedby="sizeFeedback" title="比例高">
+                        </div>
+                        <div class="custom-size-row custom-edge">
+                          <svg aria-hidden="true"><use href="#i-long-edge" /></svg>
+                          <input id="customLongEdgeSlider" type="range" min="16" max="3840" value="1024" aria-label="调整目标长边（px）" title="调整目标长边（px）">
+                          <input id="customLongEdge" type="number" inputmode="numeric" min="16" max="3840" step="1" value="1024" placeholder="长边" aria-label="目标长边（px）" aria-describedby="sizeFeedback" title="目标长边（px）">
+                          <button type="button" class="icon-btn" id="calculateSize" aria-label="换算并应用比例" title="换算并应用比例">
+                            <svg aria-hidden="true"><use href="#i-check" /></svg>
+                          </button>
+                        </div>
                       </div>
                       <p class="parameter-help size-feedback" id="sizeFeedback" role="status"></p>
                     </div>

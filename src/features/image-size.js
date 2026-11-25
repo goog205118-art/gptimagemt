@@ -41,6 +41,7 @@ export function syncImageSizeControls(profile) {
       $('customRatioWidth').value = ratio[0] || 1;
       $('customRatioHeight').value = ratio[1] || 1;
       $('customLongEdge').value = Math.max(dimensions.width, dimensions.height);
+      $('customLongEdgeSlider').value = $('customLongEdge').value;
     }
   }
   const controls = $('customSizeControls');
@@ -57,11 +58,19 @@ export function initializeImageSizeControls(onChange) {
   for (const id of ['customWidth', 'customHeight']) $(id).addEventListener('input', () => {
     selectSize(`${$('customWidth').value}x${$('customHeight').value}`);
   });
+  const longEdgeInput = $('customLongEdge');
+  const longEdgeSlider = $('customLongEdgeSlider');
+  longEdgeSlider.addEventListener('input', () => {
+    longEdgeInput.value = longEdgeSlider.value;
+  });
+  longEdgeInput.addEventListener('input', () => {
+    if (Number.isFinite(longEdgeInput.valueAsNumber)) longEdgeSlider.value = longEdgeInput.value;
+  });
   $('calculateSize').addEventListener('click', () => {
     try {
       const ratioWidth = Number($('customRatioWidth').value);
       const ratioHeight = Number($('customRatioHeight').value);
-      const longEdge = Number($('customLongEdge').value);
+      const longEdge = Number(longEdgeInput.value);
       const size = sizeFromRatio(ratioWidth, ratioHeight, longEdge, model());
       const { width, height } = parseImageSize(size);
       $('customWidth').value = width;

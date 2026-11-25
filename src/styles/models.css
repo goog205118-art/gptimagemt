@@ -111,8 +111,28 @@
 .custom-pixels {
   grid-template-columns: 16px minmax(0, 1fr) 8px minmax(0, 1fr) 18px;
 }
+.custom-size-conversion {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
 .custom-ratio {
-  grid-template-columns: 16px minmax(0, 1fr) 6px minmax(0, 1fr) 16px minmax(0, 1.35fr) 34px;
+  flex: 0 0 126px;
+  grid-template-columns: 16px minmax(0, 1fr) 6px minmax(0, 1fr);
+}
+.custom-edge {
+  flex: 1 1 184px;
+  grid-template-columns: 16px minmax(0, 1fr) 54px 34px;
+}
+.custom-edge input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  margin: 0;
+  cursor: pointer;
+}
+.custom-edge input[type="range"]:disabled {
+  cursor: default;
 }
 .custom-size-row > svg {
   width: 16px;

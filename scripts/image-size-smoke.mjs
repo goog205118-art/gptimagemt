@@ -60,7 +60,16 @@ try {
   assert.equal(await page.locator('#customWidth').inputValue(), '');
   await page.locator('#customRatioWidth').fill('16');
   await page.locator('#customRatioHeight').fill('9');
-  await page.locator('#customLongEdge').fill('2048');
+  const slider = page.getByRole('slider', { name: '调整目标长边（px）' });
+  const edge = page.locator('#customLongEdge');
+  const beforeConversion = await sizeValue();
+  await slider.fill('2048');
+  assert.equal(await edge.inputValue(), '2048');
+  await slider.press('ArrowRight');
+  assert.equal(await edge.inputValue(), '2049');
+  await edge.fill('2048');
+  assert.equal(await slider.inputValue(), '2048');
+  assert.equal(await sizeValue(), beforeConversion);
   await page.locator('#calculateSize').click();
   assert.equal(await sizeValue(), '2048x1152');
   assert.equal(await page.locator('#sizeFeedback').textContent(), '');
@@ -82,6 +91,7 @@ try {
   });
   assert.equal(await sizeValue(), '2000x2000');
   assert.equal(await page.locator('#customWidth').isDisabled(), true);
+  assert.equal(await slider.isDisabled(), true);
   assert.equal(await page.locator('#genBtn').isDisabled(), true);
   assert.match(await page.locator('#sizeFeedback').innerText(), /当前模型仅支持/);
   await page.evaluate(() => {
@@ -123,6 +133,7 @@ try {
   assert.equal(await sizeValue(), '1536x864');
   assert.equal(requests.length, 1);
   await openSettings();
+  assert.equal(await slider.inputValue(), '1536');
   await page.screenshot({ path: `${out}/desktop.png` });
   for (const [width, height, name] of [[390, 844, 'mobile'], [320, 640, 'narrow'], [844, 390, 'landscape']]) {
     await page.setViewportSize({ width, height });
@@ -134,6 +145,18 @@ try {
     assert.deepEqual(overflow, { page: false, panel: false });
     await page.screenshot({ path: `${out}/${name}.png` });
   }
+  await page.setViewportSize({ width: 320, height: 640 });
+  await slider.scrollIntoViewIfNeeded();
+  const box = await slider.boundingBox();
+  const y = box.y + box.height / 2;
+  const beforeDrag = Number(await slider.inputValue());
+  await page.mouse.move(box.x + box.width * 0.4, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.7, y, { steps: 6 });
+  await page.mouse.up();
+  assert.ok(Number(await slider.inputValue()) > beforeDrag);
+  assert.equal(await edge.inputValue(), await slider.inputValue());
+  assert.equal(await sizeValue(), '1536x864');
   assert.deepEqual(errors, []);
   await writeFile(`${out}/report.json`, JSON.stringify({ passed: true, requests: requests.length, integration, fractional, errors }, null, 2));
   console.log('Custom size browser checks passed: input, ratio conversion, model change, request guards, JSON/FormData, persistence and responsive layout. All provider requests mocked.');
