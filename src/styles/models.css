@@ -88,10 +88,6 @@
 .parameter-help#gptMaskAdvice {
   font-size: 12px;
 }
-.parameter-pane #modelProfileHint {
-  margin-top: 0;
-  line-height: 1.7;
-}
 .parameter-pane #promptBudget {
   margin-top: -6px;
 }
@@ -198,9 +194,84 @@
   font-size: 11px;
   color: var(--muted);
 }
-.parameter-pane .segment-choices[data-choices="quality"]:has(> button:nth-child(5)) {
-  grid-auto-flow: row;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.quality-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.5em;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.quality-slider {
+  --quality-progress: 0;
+  --quality-thumb: 26px;
+  --quality-fill: calc(var(--quality-thumb) / 2 + (100% - var(--quality-thumb)) * var(--quality-progress));
+  position: relative;
+  min-width: 0;
+  border-radius: 999px;
+}
+.quality-stops {
+  position: absolute;
+  inset: 5px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: calc(var(--quality-thumb) / 2 - 2px);
+  border-radius: inherit;
+  background: linear-gradient(to right, #edc8b9 var(--quality-fill), #eae9e5 var(--quality-fill));
+  pointer-events: none;
+}
+.quality-stops > span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #8a756d;
+}
+.quality-slider input[type="range"] {
+  appearance: none;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 34px;
+  margin: 0;
+  background: transparent;
+  border-radius: inherit;
+  cursor: pointer;
+}
+.quality-slider input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--quality-thumb);
+  height: var(--quality-thumb);
+  border: 1px solid #d8d4ce;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px #00000014;
+}
+.quality-slider input[type="range"]::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--quality-thumb);
+  height: var(--quality-thumb);
+  border: 1px solid #d8d4ce;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px #00000014;
+}
+.quality-slider:has(input:disabled) {
+  opacity: 0.55;
+}
+.quality-slider input:disabled {
+  cursor: default;
+}
+.quality-value {
+  text-align: center;
+  white-space: nowrap;
+}
+@media (forced-colors: active) {
+  .quality-stops {
+    border: 1px solid ButtonText;
+  }
+  .quality-stops > span {
+    background: ButtonText;
+  }
 }
 @media (max-width: 650px) {
   .top-actions .quota-trigger {

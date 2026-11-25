@@ -227,15 +227,33 @@ function renderChoiceSet(group) {
     .map((o) => {
       const selected = String(source.value) === o.value,
         disabled = source.disabled || o.disabled;
-      let content = escapeHTML(id === 'quality' ? QUALITY_LABELS[o.value] || o.text : o.text);
+      let content = escapeHTML(o.text);
       if (id === 'size') {
         const info = ratioInfo(o.value);
         content = `<span class="ratio-shape">${ratioShape(info)}</span><span class="ratio-text">${escapeHTML(info.label)}</span><small>${escapeHTML(info.detail)}</small>`;
       }
-      return `<button type="button" class="${id === 'size' ? 'choice-tile' : 'choice-segment'}" data-choice-for="${id}" data-choice-value="${escapeHTML(o.value)}" aria-pressed="${selected}" aria-label="${escapeHTML(id === 'size' ? o.text : id === 'quality' ? o.text : o.text)}" ${disabled ? 'disabled' : ''}>${content}</button>`;
+      return `<button type="button" class="${id === 'size' ? 'choice-tile' : 'choice-segment'}" data-choice-for="${id}" data-choice-value="${escapeHTML(o.value)}" aria-pressed="${selected}" aria-label="${escapeHTML(o.text)}" ${disabled ? 'disabled' : ''}>${content}</button>`;
     })
     .join('');
   if (group.matches('.segment-choices')) updateSelection(group);
+}
+function qualityOptions() {
+  return Array.from($('quality').options).filter((option) => !option.disabled);
+}
+function syncQualitySlider() {
+  const source = $('quality'), slider = $('qualitySlider'), stops = $('qualityStops');
+  const options = qualityOptions();
+  const index = Math.max(0, options.findIndex((option) => option.selected));
+  const lastIndex = Math.max(0, options.length - 1);
+  const label = QUALITY_LABELS[source.value] || source.selectedOptions[0]?.textContent || '—';
+  slider.max = lastIndex;
+  slider.value = index;
+  slider.disabled = source.disabled || options.length < 2;
+  slider.setAttribute('aria-valuetext', label);
+  slider.parentElement.style.setProperty('--quality-progress', lastIndex ? index / lastIndex : 0);
+  if (stops.childElementCount !== options.length)
+    stops.replaceChildren(...options.map(() => document.createElement('span')));
+  if ($('qualityValue').textContent !== label) $('qualityValue').textContent = label;
 }
 function syncPickers() {
   if (syncingPickers) return;
@@ -243,6 +261,7 @@ function syncPickers() {
   try {
     document.querySelectorAll('select').forEach(ensurePicker);
     document.querySelectorAll('[data-choices]').forEach(renderChoiceSet);
+    syncQualitySlider();
     const model = $('model').selectedOptions[0]?.textContent || '选择模型',
       ratio = ratioInfo($('size').value),
       quality = QUALITY_LABELS[$('quality').value] || $('quality').value,
@@ -564,6 +583,10 @@ function mountUiPickers() {
     },
     true,
   );
+  $('qualitySlider').addEventListener('input', (event) => {
+    const option = qualityOptions()[event.target.valueAsNumber];
+    if (option) $('quality').value = option.value;
+  });
   document.addEventListener('change', queuePickerSync);
   document.addEventListener('input', (e) => {
     if (e.target.closest('#advanced')) queuePickerSync();

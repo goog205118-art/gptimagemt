@@ -127,16 +127,6 @@ function applyGptProfile(normalize = false) {
     if (protectedMask) $('format').value = 'png';
     // Keep invalid imports and unfinished input visible until the user fixes them.
     syncImageSizeControls(profile);
-    $('modelProfileHint').textContent = profile.v25
-      ? `${profile.core.includes('sunburst') ? 'Sunburst · 精修优先' : 'Flare · 日常出图'} · 支持 2K / 4K、超高清与最高质量。${profile.compat ? 'C 路线以实际渠道能力为准。' : ''}`
-      : profile.v2
-        ? `GPT Image 2 · 高保真参考图，支持 2K / 4K 与多种画幅。${profile.compat ? 'C 路线最多 5 张参考图。' : ''}`
-        : profile.v15
-          ? 'GPT Image 1.5 · 编辑使用高输入保真，提供标准三种尺寸。'
-          : profile.mini
-            ? 'GPT Image 1 mini · 使用低输入保真，适合轻量草稿。'
-            : '旧版兼容路线，是否可用以当前 Key 和服务商为准。';
-    $('modelProfileHint').hidden = false;
     $('modelTimeoutHint').textContent = `此模型建议超时 ${profile.timeout} 秒。`;
     $('promptBudget').textContent = profile.v25
       ? 'OpenLux 2.5：完整提示词上限 1000 字符（含参考说明）。'

@@ -393,18 +393,15 @@
                   class="parameter-pane"
                 >
                   <div class="parameter-field">
-                    <label for="model">模型</label
-                    ><select id="model" aria-label="生成模型">
+                    <select id="model" aria-label="生成模型">
                       <option value="gpt-image-2">GPT Image 2</option>
                       <option value="gpt-image-2-c">GPT Image 2 · C</option>
                       <option value="gpt-image-2.5-sunburst">GPT Image 2.5 Sunburst</option>
                       <option value="gpt-image-2.5-flare">GPT Image 2.5 Flare</option>
                     </select>
-                    <p class="parameter-help" id="modelProfileHint" hidden></p>
                   </div>
                   <div class="parameter-field">
-                    <label id="ratioLabel" for="size">画面比例</label
-                    ><select id="size" data-choice-source aria-label="图片尺寸">
+                    <select id="size" data-choice-source aria-label="图片尺寸">
                       <option value="1024x1024">1:1 · 1024</option>
                       <option value="1536x1024">3:2 · 横版</option>
                       <option value="1024x1536">2:3 · 竖版</option>
@@ -415,7 +412,7 @@
                       class="choice-grid ratio-choices"
                       data-choices="size"
                       role="group"
-                      aria-labelledby="ratioLabel"
+                      aria-label="画面比例"
                     ></div>
                     <div class="custom-size-controls" id="customSizeControls" role="group" aria-label="自定义尺寸与比例">
                       <div class="custom-size-row custom-pixels">
@@ -445,19 +442,20 @@
                     </div>
                   </div>
                   <div class="parameter-field inline-field">
-                    <label id="qualityLabel" for="quality">质量</label
-                    ><select id="quality" data-choice-source aria-label="生成质量">
+                    <label for="qualitySlider">质量</label>
+                    <select id="quality" data-choice-source aria-label="生成质量" hidden>
                       <option value="low">快速预览</option>
                       <option value="medium" selected>标准质量</option>
                       <option value="high">高质量</option>
                       <option value="auto">自动质量</option>
                     </select>
-                    <div
-                      class="choice-grid segment-choices"
-                      data-choices="quality"
-                      role="group"
-                      aria-labelledby="qualityLabel"
-                    ></div>
+                    <div class="quality-control">
+                      <div class="quality-slider">
+                        <div class="quality-stops" id="qualityStops" aria-hidden="true"></div>
+                        <input id="qualitySlider" type="range" min="0" max="3" step="1" value="1">
+                      </div>
+                      <span class="quality-value" id="qualityValue" aria-hidden="true">标准</span>
+                    </div>
                   </div>
                   <div class="parameter-field inline-field">
                     <label id="countLabel" for="n">张数</label

@@ -12,9 +12,9 @@
   min-width: 0;
   flex: 0 0 var(--mode-label-width);
   height: 34px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: var(--surface);
+  background: var(--ink);
   transition:
     flex-grow 360ms var(--ease-standard),
     background-color 240ms var(--ease-standard),
@@ -35,7 +35,7 @@
   padding: 0 8px;
   border-radius: 999px;
   font-size: 12px;
-  color: var(--muted);
+  color: white;
   transition:
     color 240ms var(--ease-standard),
     background-color 240ms var(--ease-standard);
@@ -44,8 +44,8 @@
   color: var(--ink);
   font-weight: 600;
 }
-.mode-label:hover {
-  color: var(--ink);
+.mode-control:not(.is-selected):hover {
+  background: #414141;
 }
 .mode-options {
   flex: 1 1 0;

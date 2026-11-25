@@ -1025,11 +1025,9 @@ export function mountAgent() {
   $('agentModeBtn').onclick = () => {
     if (state.agentMode) return;
     setComposerMode(true);
-    setStatus('Agent 会先规划与补问，确认方案后才生图。');
   };
   $('manualModeBtn').onclick = () => {
     setComposerMode(false);
-    setStatus('已切换手动模式，可以自行调整生成参数。');
   };
   $('agentSettingsBtn').onclick = showAgentSettings;
   $('agentReuseKey').onchange = () => {

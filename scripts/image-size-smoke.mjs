@@ -99,11 +99,29 @@ try {
     select.dispatchEvent(new Event('change', { bubbles: true }));
   });
   assert.equal(await page.locator('#genBtn').isDisabled(), false);
+  const quality = page.getByRole('slider', { name: '质量', exact: true });
+  const setModel = (id) => page.locator('#model').evaluate((select, id) => {
+    select.value = id;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }, id);
+  assert.equal(await page.locator('#qualityStops > span').count(), 4);
+  await setModel('gpt-image-2.5-flare');
+  assert.equal(await page.locator('#qualityStops > span').count(), 6);
+  await quality.press('End');
+  assert.equal(await page.locator('#quality').inputValue(), 'auto');
+  assert.equal(await quality.getAttribute('aria-valuetext'), '自动');
+  await quality.press('ArrowLeft');
+  assert.equal(await page.locator('#quality').inputValue(), 'max');
+  assert.equal(await page.locator('#qualityValue').textContent(), '极致');
+  await setModel('gpt-image-2');
+  assert.equal(await page.locator('#qualityStops > span').count(), 4);
+  assert.equal(await page.locator('#quality').inputValue(), 'high');
   await page.locator('#parameterClose').click();
   await page.locator('#genBtn').click();
   await page.waitForFunction(() => document.querySelector('[data-output]'));
   assert.equal(requests.length, 1);
   assert.equal(requests[0].size, '2000x2000');
+  assert.equal(requests[0].quality, 'high');
   assert.equal(requests[0].n, 1);
   const integration = await page.evaluate(async () => {
     const { prepareGptRequest } = await import('/src/services/images.js');
@@ -132,8 +150,24 @@ try {
   await page.waitForFunction(() => !document.getElementById('genBtn').disabled);
   assert.equal(await sizeValue(), '1536x864');
   assert.equal(requests.length, 1);
+  const modeColors = () => page.evaluate(() => {
+    const inactive = document.querySelector('.mode-control:not(.is-selected)');
+    return {
+      inactive: getComputedStyle(inactive).backgroundColor,
+      send: getComputedStyle(document.getElementById('genBtn')).backgroundColor,
+      label: getComputedStyle(inactive.querySelector('.mode-label')).color,
+    };
+  });
+  for (const mode of ['agent', 'manual']) {
+    await page.locator(`#${mode}ModeBtn`).click();
+    await page.mouse.move(0, 0);
+    const colors = await modeColors();
+    assert.equal(colors.inactive, colors.send);
+    assert.equal(colors.label, 'rgb(255, 255, 255)');
+  }
   await openSettings();
   assert.equal(await slider.inputValue(), '1536');
+  assert.equal(await quality.getAttribute('aria-valuetext'), '精细');
   await page.screenshot({ path: `${out}/desktop.png` });
   for (const [width, height, name] of [[390, 844, 'mobile'], [320, 640, 'narrow'], [844, 390, 'landscape']]) {
     await page.setViewportSize({ width, height });
